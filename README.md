@@ -82,6 +82,22 @@ Version lives in `src/Version.h`.
 * `qol_home.json` is the Home catalog. Edit it, commit, and the app picks it up on next start; a copy is built into the exe as a fallback.
 * `qol_update.json` is the update feed. Regenerate it with `python scripts\gen_update.py -o qol_update.json` after each release.
 
+## Contributing
+
+Bug reports, feature ideas and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks and what to include.
+
+## Star history
+
+⭐ Thanks to everyone using the manager, reporting mod feed bugs and sending fixes.
+
+<a href="https://www.star-history.com/?repos=DavidHiFi%2FQualityOfLifeModManager&amp;type=date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=DavidHiFi/QualityOfLifeModManager&amp;type=date&amp;theme=dark&amp;legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=DavidHiFi/QualityOfLifeModManager&amp;type=date" />
+    <img alt="DavidHiFi/QualityOfLifeModManager GitHub star history" src="https://api.star-history.com/chart?repos=DavidHiFi/QualityOfLifeModManager&amp;type=date" />
+  </picture>
+</a>
+
 ## Credits
 
 * [DavidHiFi](https://github.com/DavidHiFi), this app and the Quality of Life series.
