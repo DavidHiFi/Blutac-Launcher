@@ -1,28 +1,42 @@
-# Contributing
+# Contributing to Quality of Life Mod Manager
 
-Thanks for helping the Quality of Life mod manager. Bug reports and fixes for the mod feed and the release checks both help.
+Thanks for helping. Bug reports, ideas and pull requests are all welcome.
 
-## Ways to help
+## Reporting a bug
 
-- Report mod feed problems and install or update bugs
-- Send fixes for the Qt 6 interface and the build scripts
-- Improve the release checks
+[Open an issue](https://github.com/DavidHiFi/QualityOfLifeModManager/issues/new) and include:
 
-## Getting set up
+- what you did, what you expected and what happened instead
+- your Windows version, the app version (shown on the About page) and the game and mod involved
+- a screenshot of any error box, and whether you played LAN or Online
 
-The manager is Qt 6 Widgets with MinGW and CMake. Build with:
+A broken entry in the Home catalog or the update feed is a bug too. Name the mod and what it shows.
 
-```
-powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Clean
-```
+## Suggesting a feature
 
-The build writes to dist\.
+Open an issue that describes what you want to do and why. A screenshot or a mock-up helps.
 
-## Checks before a pull request
+## Sending a pull request
 
-- Run the release checks with `scripts\build-setup.ps1` (DLL check, `-installcheck`, Setup build and installed check)
-- Bump the version in src/Version.h if your change ships
+1. Fork the repo and create a branch from `main`.
+2. Install Qt 6 (Widgets, Network, Concurrent, Svg) with its MinGW kit, plus CMake and Ninja. Set their paths at the top of `scripts\build.ps1`, then build:
 
-## Where to submit
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Clean
+   ```
 
-Open issues and pull requests in this repository.
+3. Run the checks against the build in `dist\`. Use a throwaway Plutonium folder that holds an empty `bin\plutonium-bootstrapper-win32.exe`, never your real one:
+
+   ```powershell
+   dist\QualityOfLifeModManager.exe -installcheck
+   dist\QualityOfLifeModManager.exe -selftest -plutoniumdir <throwaway folder>
+   ```
+
+   Every `-selftest` line should say PASS. If your change touches Setup, also run `scripts\build-setup.ps1 -NsisDir <NSIS folder>`.
+4. Keep each pull request to one change, and say in the description how you tested it.
+
+Read [AGENTS.md](AGENTS.md) before you start. It lists the rules that are easy to break: brand strings and URLs live only in `src/Version.h`, translation keys are the Portuguese source strings, and `qol_update.json` is regenerated with `scripts/gen_update.py`, never edited by hand.
+
+## License
+
+By contributing, you agree that your work is released under this repo's [LGPL-3.0 license](LICENSE).

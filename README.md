@@ -1,94 +1,139 @@
 <div align="center">
 
+<img src="https://socialify.git.ci/DavidHiFi/QualityOfLifeModManager/image?description=1&font=Inter&language=1&name=1&owner=1&pattern=Plus&theme=Dark" alt="Quality of Life Mod Manager project card" width="100%">
+
 # Quality of Life Mod Manager
 
-**Install, update, launch and remove mods for Call of Duty on Plutonium.**
+**Install, update, launch and remove Call of Duty mods on [Plutonium](https://plutonium.pw).**
 
-One window for the whole [Quality of Life series](https://github.com/DavidHiFi/Plutonium-QoL-Series), every other mod in your Plutonium folders, LAN and online play, ReShade, and a LAN server.
+One window for the [Quality of Life series](https://github.com/DavidHiFi/Plutonium-QoL-Series), every other mod in your Plutonium folders, LAN and online play, ReShade and a LAN server.
 
 <a href="https://github.com/DavidHiFi/QualityOfLifeModManager/releases/latest">
-<img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD-2EA043?style=for-the-badge&labelColor=161B22" alt="Download" height="42">
+<img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20LATEST%20RELEASE-2EA043?style=for-the-badge&labelColor=161B22" alt="Download the latest release" height="42">
 </a>
 
 <br><br>
 
-<img src="https://img.shields.io/github/v/release/DavidHiFi/QualityOfLifeModManager?style=flat-square&color=5865F2&labelColor=161B22">
-<img src="https://img.shields.io/github/downloads/DavidHiFi/QualityOfLifeModManager/total?style=flat-square&label=downloads&color=5865F2&labelColor=161B22">
-<img src="https://img.shields.io/badge/platform-Windows-5865F2?style=flat-square&labelColor=161B22">
+<img src="https://img.shields.io/github/v/release/DavidHiFi/QualityOfLifeModManager?style=flat-square&label=version&color=8957E5&labelColor=161B22" alt="Latest version">
+<img src="https://img.shields.io/github/downloads/DavidHiFi/QualityOfLifeModManager/total?style=flat-square&label=downloads&color=1F6FEB&labelColor=161B22" alt="Total downloads">
+<img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-DB6D28?style=flat-square&labelColor=161B22" alt="Platforms: Windows 10 and 11">
 
 </div>
 
 ---
 
-## What it does
+## Installation
 
-* **Quality of Life page.** Install, update or remove each game's mod, plus the Black Ops II extras: HD texture pack, custom sounds, controller icons (PlayStation 5, Switch, Xbox). Everything goes into your Plutonium folder; the game's own files are never touched.
-* **Backups.** Every Quality of Life install first copies your own textures, sounds, controller icons, ReShade setup, scripts and settings into `storage\t6\backups`. Put any of them back from the Quality of Life page, or take a fresh copy, including your other mods and maps. Removing a pack offers to put your originals back.
-* **Play.** One page per game with the game art. LAN starts the game through Plutonium's bootstrapper with the selected mod loaded. Online hands off to Plutonium's own launcher, which signs you in. Tick **ReShade** to start the watchdog beside the game.
-* **Home.** A catalog of community mods with cover art, install badges and one-click install.
-* **Mods.** Drop a `.zip`, `.rar`, `.7z`, `.exe` or `.cll`, or paste a GitHub link. Every install writes a checkpoint, so uninstall restores what it replaced.
-* **LAN server.** Start and stop a dedicated server with generated configs.
-* **ReShade.** Cinematic colour grading for every Plutonium game. Plutonium clears its `bin` folder on every start, so the watchdog puts the files back the moment a game opens and saves your in-game preset edits.
-* **Fifteen themes.** Nocturne, Classic Things, OLED, the four Catppuccin flavours and the six T3 palettes.
-* **Self-updating.** Checks this repository's releases on start.
+1. Download **`QualityOfLifeModManagerSetup.exe`** from the [latest release](https://github.com/DavidHiFi/QualityOfLifeModManager/releases/latest) and run it. It installs for your user only, with no admin rights, and adds Start menu and desktop shortcuts.
+2. Run the app. The first-run wizard asks for your name, a theme, your Plutonium folder and your game folders.
+3. Open **Quality of Life** in the sidebar and press **Install** on Black Ops II.
+4. Open **Black Ops II**, pick **LAN** or **Online**, and press **Start**.
 
-## Games
+Prefer no installer? Unzip **`QualityOfLifeModManager-portable.zip`** anywhere you can write to and run the exe inside it. The `.update.bin` file on the release page is for the app's own updater, not an installer.
+
+## Features
+
+### Quality of Life series
+
+- **One-click mods:** install, update or remove each game's Quality of Life mod.
+- **Black Ops II extras:** HD texture pack, custom sounds and PlayStation 5, Switch or Xbox button prompts.
+- **Backups:** every install first copies your own textures, sounds, icons, ReShade setup, scripts and settings.
+- **Put it back:** restore any backup from the Quality of Life page, or remove a pack and get your originals back.
+
+### Playing
+
+- **Play page:** one page per game with its art, a LAN or Online choice and a Start button.
+- **LAN:** starts the game with the selected mod already loaded.
+- **Online:** signs in with your Plutonium account and starts the game without opening Plutonium's launcher.
+- **ReShade:** colour grading for every Plutonium game, kept in place while you play.
+- **DLSS 5:** an optional switch for Black Ops II LAN games, once you import it from a folder that already has it.
+
+### Mods and servers
+
+- **Home:** a catalog of community mods with cover art and one-click install.
+- **Mods:** drop a `.zip`, `.rar`, `.7z`, `.exe` or `.cll` file, or paste a GitHub link.
+- **Safe uninstall:** every install saves a checkpoint, so removing a mod restores what it replaced.
+- **LAN server:** start and stop a dedicated server with generated configs.
+
+### The app
+
+- **Fifteen themes:** Nocturne, Classic Things, OLED, the four Catppuccin flavours and six T3 palettes.
+- **Four languages:** English, Spanish, Brazilian Portuguese and Russian.
+- **Self-updating:** checks this repo's releases when it starts.
+
+### Supported games
 
 | Code | Game | Client |
-| --- | --- | --- |
+|---|---|---|
 | T6 | Black Ops II | Plutonium |
 | T4 | World at War | Plutonium |
 | T5 | Black Ops | Plutonium |
-| T7 | Black Ops III | T7-CLL or BOIII Community |
 | IW5 | Modern Warfare 3 | Plutonium |
+| T7 | Black Ops III | T7-CLL or BOIII Community |
 | S1 | Advanced Warfare | S1-CLL |
 
-The Quality of Life series covers T6 (released), T4, T5 and T7 (planned).
+## Notes
 
-## Install
+> [!NOTE]
+> **Only the Black Ops II mod is out so far.** The World at War, Black Ops and Black Ops III mods in the series are planned.
 
-1. Download **`QualityOfLifeModManagerSetup.exe`** from [Releases](https://github.com/DavidHiFi/QualityOfLifeModManager/releases/latest) and run it. It installs to `%LOCALAPPDATA%\Programs\Quality of Life Mod Manager` for the current user, adds Start menu and desktop shortcuts, and registers in Apps & features. Everything the app needs is inside Setup. It needs no .NET, VC++ redistributable, or separate Qt download. Before Setup finishes, it starts a hidden check that loads Qt, MinGW, the Windows platform plugin, Schannel TLS, and the Windows graphics libraries. A damaged install stops with one diagnostic instead of opening a chain of missing-DLL dialogs.
+> [!IMPORTANT]
+> **Plutonium deletes ReShade every time it starts.** Tick **ReShade** on the Play page and the app's watchdog puts the files back as the game opens, then saves your in-game preset edits.
 
-   > Prefer no installer? Take `QualityOfLifeModManager-portable.zip` and unzip it anywhere writable.
-   >
-   > The release has no bare app `.exe`. Its in-app updater payload is named `QualityOfLifeModManager.update.bin`, so it cannot be mistaken for Setup.
+> [!NOTE]
+> **Mods load on LAN only.** Online games start without a mod. Pick one from the game's own Mods menu once you are in.
 
-2. Run the app. The first-run wizard asks for your name, theme, Plutonium folder and game folders.
-3. Open **Quality of Life** in the sidebar and press **Install** on Black Ops II.
-4. Open **Black Ops II**, pick LAN or Online, and press Start.
+> [!NOTE]
+> **Settings live in `QualityOfLife.ini` next to the exe.** If your Plutonium folder is not `%LOCALAPPDATA%\Plutonium`, point the app at it from **Settings**.
 
-Prefer a zip? `QualityOfLifeModManager-portable.zip` is the same app. Unzip the whole archive anywhere writable, then run the exe inside it.
+<details>
+<summary><b>Building from source</b></summary>
 
-Settings live in `QualityOfLife.ini` next to the exe. Point it at a different Plutonium folder from **Settings** if yours is not `%LOCALAPPDATA%\Plutonium`.
+<br>
 
-## Online versus LAN
-
-Plutonium's bootstrapper, started directly, has no login and answers `Could not authenticate (401)`. LAN mode needs no login, so the app can pre-load a mod with `fs_game`. Online play therefore goes through the `plutonium://play/<game>` handler that Plutonium's launcher registers: the launcher signs in and starts the game, and you pick the mod from its in-game Mods menu. Online is only offered for the registered install in `%LOCALAPPDATA%\Plutonium`.
-
-## Building
-
-Qt 6 (Widgets, Network, Concurrent, Svg), a MinGW kit and CMake.
+You need Qt 6 (Widgets, Network, Concurrent, Svg) with its MinGW kit, CMake and Ninja. The paths to all three sit at the top of `scripts\build.ps1`; edit them if yours live elsewhere.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Clean
+dist\QualityOfLifeModManager.exe -installcheck
+dist\QualityOfLifeModManager.exe -selftest -plutoniumdir <throwaway folder>
 ```
 
-The script writes `dist\` with the exe and the Qt runtime. Paths at the top of the script point at the Qt kit, MinGW and the Visual Studio folder that carries cmake and ninja. `scripts\build-setup.ps1` checks every imported DLL, runs `-installcheck`, builds Setup, extracts the finished Setup into a throwaway directory, and runs the installed check again. See `scripts\README.txt` for the static single-exe route.
+`build.ps1` writes `dist\` with the exe and the Qt runtime beside it. `scripts\build-setup.ps1 -NsisDir <NSIS folder>` checks every imported DLL, builds Setup with NSIS, unpacks the finished Setup into a throwaway folder and checks it again. `scripts\README.txt` covers the static single-exe route.
 
-Version lives in `src/Version.h`.
+The version lives in `src/Version.h`. [AGENTS.md](AGENTS.md) explains the parts that are easy to break.
 
-## Feeds
+</details>
 
-* `qol_home.json` is the Home catalog. Edit it, commit, and the app picks it up on next start; a copy is built into the exe as a fallback.
-* `qol_update.json` is the update feed. Regenerate it with `python scripts\gen_update.py -o qol_update.json` after each release.
+<details>
+<summary><b>The two feeds</b></summary>
+
+<br>
+
+- `qol_home.json` is the Home catalog. Edit it and commit, and the app picks it up on its next start. A copy is built into the exe as a fallback.
+- `qol_update.json` is the update feed. Regenerate it after each release with `python scripts\gen_update.py -o qol_update.json`, then check it with `python scripts\gen_update.py --verify qol_update.json`. Never edit it by hand.
+
+</details>
+
+---
+
+## Support development
+
+The manager is free and always will be. If it saves you some fiddling with mod folders, a coffee keeps it going.
+
+[![Support DavidHiFi on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/davidhifi)
 
 ## Contributing
 
-Bug reports, feature ideas and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks and what to include.
+Bug reports with the game and mod involved, catalog fixes and pull requests all help.
+
+<a href="CONTRIBUTING.md">
+<img src="https://img.shields.io/badge/%F0%9F%A4%9D%20HOW%20TO%20CONTRIBUTE-8957E5?style=for-the-badge&labelColor=161B22" alt="How to contribute" height="36">
+</a>
 
 ## Star history
 
-⭐ Thanks to everyone using the manager, reporting mod feed bugs and sending fixes.
+Thanks to everyone using the manager, reporting mod feed bugs and sending fixes.
 
 <a href="https://www.star-history.com/?repos=DavidHiFi%2FQualityOfLifeModManager&amp;type=date">
   <picture>
@@ -100,14 +145,31 @@ Bug reports, feature ideas and pull requests are welcome. See [CONTRIBUTING.md](
 
 ## Credits
 
-* [DavidHiFi](https://github.com/DavidHiFi), this app and the Quality of Life series.
-* [MestreTM](https://github.com/MestreTM/CLL-Cod-Lan-Launcher), Cod Lan Launcher, which this app is forked from. Its games list, mod installer, LAN server, themes and updater are all its work.
-* [JugAndDoubleTap](https://github.com/JugAndDoubleTap/LanLauncher), the original LanLauncher.
-* [xerxes-at](https://github.com/xerxes-at), T4, T5 and T6 dedicated server configs.
-* [alterware.dev](https://alterware.dev) and [boiii-community](https://gitlab.com/boiii-community/BOIII-Community), standalone client sources.
-* [crosire](https://reshade.me), ReShade.
-* Plutonium and Call of Duty belong to their owners. This project is not affiliated with them.
+- **Author:** Myself, [DavidHiFi](https://github.com/DavidHiFi)
 
-## License
+| Who | What |
+|---|---|
+| **MestreTM** ([Cod Lan Launcher](https://github.com/MestreTM/CLL-Cod-Lan-Launcher)) | The app this one is forked from, at v1.2.0. The games list, mod installer, LAN server, base themes and updater are its work. |
+| **JugAndDoubleTap** ([LanLauncher](https://github.com/JugAndDoubleTap/LanLauncher)) | The original LAN launcher that Cod Lan Launcher grew from, and the 7-Zip download the kit importer uses. |
+| **xerxes-at** ([T4](https://github.com/xerxes-at/T4ServerConfigs), [T5](https://github.com/xerxes-at/T5ServerConfig) and [T6](https://github.com/xerxes-at/T6ServerConfigs) server configs) | The dedicated server configs the LAN server page downloads. |
+| **AlterWare** ([alterware.dev](https://alterware.dev)) | Some of the standalone client sources. |
+| **BOIII Community** ([BOIII-Community](https://gitlab.com/boiii-community/BOIII-Community)) | The alternative Black Ops III client. |
+| **crosire** ([ReShade](https://reshade.me)) | ReShade, bundled unmodified for the colour grading. |
+| **Catppuccin** ([catppuccin](https://github.com/catppuccin/catppuccin)) | The four Catppuccin colour palettes. |
 
-LGPL-3.0, inherited from Cod Lan Launcher. See [LICENSE](LICENSE).
+Built on [Qt 6](https://www.qt.io), with [CMake](https://cmake.org), [Ninja](https://ninja-build.org), [MinGW-w64](https://www.mingw-w64.org), [NSIS](https://nsis.sourceforge.io) for Setup, [7-Zip](https://www.7-zip.org) for archives and [Python](https://www.python.org) for the feed scripts.
+
+> Missing or wrong credit? [Open an issue](https://github.com/DavidHiFi/QualityOfLifeModManager/issues/new) and I'll fix it.
+
+## Disclaimers
+
+Cod Lan Launcher, the app this is forked from, was written by MestreTM. Most of the code this fork adds was developed with AI coding agents, including Claude Code and Codex. No single AI agent made the project.
+
+Online play uses your Plutonium account. The app keeps your sign-in in Plutonium's own `config.json`, encrypted for your Windows user, exactly where the official launcher keeps it, and sends it only to Plutonium. Setup is not code-signed, so Windows SmartScreen may warn the first time you run it.
+
+The app is LGPL-3.0, the license it inherited from Cod Lan Launcher. See [LICENSE](LICENSE).
+
+<div align="center">
+<br>
+<sub>Not affiliated with Activision, Treyarch or Plutonium. Requires your own copies of the games and <a href="https://plutonium.pw">Plutonium</a>.</sub>
+</div>
