@@ -115,14 +115,6 @@ The version lives in `src/Version.h`. [AGENTS.md](AGENTS.md) explains the parts 
 
 </details>
 
----
-
-## Support development
-
-The manager is free and always will be. If it saves you some fiddling with mod folders, a coffee keeps it going.
-
-[![Support DavidHiFi on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/davidhifi)
-
 ## Contributing
 
 Bug reports with the game and mod involved, catalog fixes and pull requests all help.
