@@ -3,7 +3,7 @@
 #include "ArchiveTool.h"
 #include "Downloader.h"
 #include "GameCatalog.h"
-#include "ProgressDialog.h"
+#include "DownloadCenter.h"
 #include "UpdateService.h"
 #include "../Checkables.h"
 #include "GameLauncher.h"
@@ -98,11 +98,12 @@ PlayPage::PlayPage(AppSettings &settings, QWidget *parent)
     m_reshade = new Ui::CheckBox(tr("ReShade"), this);
     m_reshade->setProperty("onArt", true);
     m_reshade->setChecked(m_settings.launchReShade);
-    m_reshade->setToolTip(tr("Ticked, ReShade is in place before the game starts and its watchdog window opens "
-                             "beside it, closing again when the game does - Plutonium clears ReShade out of its "
-                             "bin folder on every start and the watchdog puts it back. LAN gets the build with "
-                             "full add-on support, and DLSS 5 with it on Black Ops II; online gets the stock "
-                             "build, whose add-on support is limited. Unticked, ReShade is taken out of bin."));
+    m_reshade->setToolTip(tr("Ticked, ReShade is installed on the spot and made ready before the game "
+                             "starts. Plutonium clears ReShade out of its bin folder on every start, so "
+                             "a quiet helper puts it back while you play and goes away with the game. "
+                             "LAN gets the build with full add-on support, and DLSS 5 with it on Black "
+                             "Ops II; online gets the stock build, whose add-on support is limited. "
+                             "Unticked, ReShade is taken out of bin."));
     opts->addWidget(m_reshade);
     opts->addSpacing(12);
     m_dlss5 = new Ui::CheckBox(tr("DLSS 5"), this);
@@ -137,6 +138,8 @@ PlayPage::PlayPage(AppSettings &settings, QWidget *parent)
         m_settings.launchReShade = on;
         m_settings.saveToIni();
         updateLaunchOptions();
+        if (on)
+            installReShadeOnTick();
     });
     connect(m_dlss5, &QCheckBox::toggled, this, [this](bool on) {
         m_settings.launchDlss5 = on;
@@ -337,7 +340,7 @@ void PlayPage::updateLaunchOptions()
     else
         hint = tr("No login needed. No mod selected; pick one on the Mods page to load it automatically.");
     if (m_settings.launchReShade && !reshadeReady)
-        hint += QStringLiteral("  ") + tr("ReShade is not installed yet: see the Quality of Life page.");
+        hint += QStringLiteral("  ") + tr("ReShade is not installed yet: see the Game Configuration page.");
     else if (m_settings.launchReShade && !online && code == QLatin1String("t6")
              && m_settings.launchDlss5 && QolService::dlssPayloadReady(m_settings))
         hint += QStringLiteral("  ") + tr("ReShade runs with full add-on support and DLSS 5 (F10 for its panel).");
@@ -593,82 +596,66 @@ void PlayPage::installBo3Client(const QString &kind, bool notifyWhenDone, bool l
     if (gameDir.isEmpty())
         return;
 
-    auto *progress = new ProgressDialog(tr("Installing BO3 client"), this);
-    progress->setAttribute(Qt::WA_DeleteOnClose);
-    progress->setIndeterminate(true);
-    progress->setStatus(tr("Starting download..."));
-    progress->show();
-
-    const QPointer<ProgressDialog> guard(progress);
     const QString job = kind;
-    const QFuture<void> future = QtConcurrent::run([this, gameDir, job, guard, notifyWhenDone, launchWhenReady]() {
-        auto report = [&](const QString &text, int pct) {
-            QMetaObject::invokeMethod(this, [guard, text, pct]() {
-                if (!guard)
-                    return;
-                guard->setStatus(text);
-                if (pct < 0)
-                    guard->setIndeterminate(true);
-                else
-                    guard->setProgress(pct, 100);
-            }, Qt::QueuedConnection);
-        };
-
-        QString error;
-        bool ok = false;
-        if (job == QLatin1String("cll")) {
-            report(QObject::tr("Downloading T7-CLL..."), 8);
-            const QString zip = QDir::temp().filePath(
-                QStringLiteral("LanLauncher_t7_cll_%1.zip").arg(QDateTime::currentMSecsSinceEpoch()));
-            ok = Downloader::downloadToFile(
-                QStringLiteral("https://github.com/MestreTM/t7-cll/releases/latest/download/t7_cll.zip"),
-                zip, error,
-                [&](qint64 got, qint64 total) {
-                    const int pct = (total > 0) ? int(got * 70 / total) : 10;
-                    report(QObject::tr("Downloading T7-CLL..."), pct);
-                },
-                10 * 60 * 1000);
-            if (ok) {
-                report(QObject::tr("Extracting into the game folder..."), 80);
-                const QString zipMd5Path = zip;
-                ok = ArchiveTool::extractToDirectory(zip, gameDir, &error);
-                if (ok)
-                    UpdateService::stampFile(QStringLiteral("t7-cll"), QString(), zipMd5Path);
-            }
-            QFile::remove(zip);
-        } else {
-            report(QObject::tr("Reading competitive updater..."), 5);
-            const QByteArray raw = Downloader::downloadBytes(
-                QStringLiteral("https://gitlab.com/boiii-community/BOIII-Community/-/raw/main/updater.json?ref_type=heads"),
-                error, 30000);
-            QString exeUrl;
-            const auto doc = QJsonDocument::fromJson(raw);
-            for (const QJsonValue &row : doc.array()) {
-                const QJsonArray a = row.toArray();
-                if (a.size() < 4)
-                    continue;
-                if (a.at(0).toString().compare(QLatin1String("boiii.exe"), Qt::CaseInsensitive) == 0) {
-                    exeUrl = a.at(3).toString();
-                    break;
+    DownloadCenter::run(this, tr("Installing BO3 client"),
+        [this, gameDir, job](QString &error, const std::function<void(const QString &, int)> &report,
+                             const CancelHandle &canc) -> bool {
+            const auto check = [&canc]() { return !canc || *canc; };
+            bool ok = false;
+            if (job == QLatin1String("cll")) {
+                report(QObject::tr("Downloading T7-CLL..."), 8);
+                const QString zip = QDir::temp().filePath(
+                    QStringLiteral("LanLauncher_t7_cll_%1.zip").arg(QDateTime::currentMSecsSinceEpoch()));
+                ok = Downloader::downloadToFile(
+                    QStringLiteral("https://github.com/MestreTM/t7-cll/releases/latest/download/t7_cll.zip"),
+                    zip, error,
+                    [&](qint64 got, qint64 total) {
+                        const int pct = (total > 0) ? int(got * 70 / total) : 10;
+                        report(QObject::tr("Downloading T7-CLL..."), pct);
+                    },
+                    10 * 60 * 1000, check);
+                if (ok) {
+                    report(QObject::tr("Extracting into the game folder..."), 80);
+                    const QString zipMd5Path = zip;
+                    ok = ArchiveTool::extractToDirectory(zip, gameDir, &error, {}, check);
+                    if (ok)
+                        UpdateService::stampFile(QStringLiteral("t7-cll"), QString(), zipMd5Path);
+                }
+                QFile::remove(zip);
+            } else {
+                report(QObject::tr("Reading competitive updater..."), 5);
+                const QByteArray raw = Downloader::downloadBytes(
+                    QStringLiteral("https://gitlab.com/boiii-community/BOIII-Community/-/raw/main/updater.json?ref_type=heads"),
+                    error, 30000, check);
+                QString exeUrl;
+                const auto doc = QJsonDocument::fromJson(raw);
+                for (const QJsonValue &row : doc.array()) {
+                    const QJsonArray a = row.toArray();
+                    if (a.size() < 4)
+                        continue;
+                    if (a.at(0).toString().compare(QLatin1String("boiii.exe"), Qt::CaseInsensitive) == 0) {
+                        exeUrl = a.at(3).toString();
+                        break;
+                    }
+                }
+                if (exeUrl.isEmpty()) {
+                    ok = false;
+                    if (error.isEmpty())
+                        error = QObject::tr("Could not find boiii.exe in the competitive updater.");
+                } else {
+                    report(QObject::tr("Downloading boiii.exe..."), 20);
+                    const QString dest = QDir(gameDir).filePath(QStringLiteral("boiii.exe"));
+                    ok = Downloader::downloadToFile(exeUrl, dest, error, [&](qint64 got, qint64 total) {
+                        const int pct = (total > 0) ? int(20 + got * 70 / total) : 30;
+                        report(QObject::tr("Downloading boiii.exe..."), pct);
+                    }, 10 * 60 * 1000, check);
+                    if (ok)
+                        UpdateService::stampFile(QStringLiteral("boiii-community"), QString(), dest);
                 }
             }
-            if (exeUrl.isEmpty()) {
-                ok = false;
-                if (error.isEmpty())
-                    error = QObject::tr("Could not find boiii.exe in the competitive updater.");
-            } else {
-                report(QObject::tr("Downloading boiii.exe..."), 20);
-                const QString dest = QDir(gameDir).filePath(QStringLiteral("boiii.exe"));
-                ok = Downloader::downloadToFile(exeUrl, dest, error, [&](qint64 got, qint64 total) {
-                    const int pct = (total > 0) ? int(20 + got * 70 / total) : 30;
-                    report(QObject::tr("Downloading boiii.exe..."), pct);
-                }, 10 * 60 * 1000);
-                if (ok)
-                    UpdateService::stampFile(QStringLiteral("boiii-community"), QString(), dest);
-            }
-        }
-
-        QMetaObject::invokeMethod(this, [this, guard, ok, error, job, notifyWhenDone, launchWhenReady]() {
+            return ok;
+        },
+        [this, job, notifyWhenDone, launchWhenReady](bool ok, const QString &error) {
             if (ok) {
                 m_settings.bo3Client = job;
                 m_settings.bo3ClientChosen = true;
@@ -676,24 +663,21 @@ void PlayPage::installBo3Client(const QString &kind, bool notifyWhenDone, bool l
                 updateClientButton();
             }
             if (ok && !notifyWhenDone) {
-                if (guard)
-                    guard->close();
                 if (launchWhenReady
-                    && QDateTime::currentMSecsSinceEpoch() >= m_blockLaunchUntil)
+                        && QDateTime::currentMSecsSinceEpoch() >= m_blockLaunchUntil)
                     emit launchRequested(m_gameId, selectedMode());
                 return;
             }
-            if (guard)
-                guard->close();
+            // A stopped download is the user's decision; the row already says so.
+            if (error == tr("Cancelled."))
+                return;
             if (ok && notifyWhenDone)
                 QMessageBox::information(this, tr("Black Ops III"),
                                          tr("Download complete. The client is ready in the game folder."));
             else if (!ok)
                 QMessageBox::warning(this, tr("Black Ops III"),
                                      error.isEmpty() ? tr("Failed to install the client.") : error);
-        }, Qt::QueuedConnection);
-    });
-    Q_UNUSED(future);
+        });
 }
 
 void PlayPage::installS1Client(bool notifyWhenDone, bool launchWhenReady)
@@ -702,64 +686,77 @@ void PlayPage::installS1Client(bool notifyWhenDone, bool launchWhenReady)
     if (gameDir.isEmpty())
         return;
 
-    auto *progress = new ProgressDialog(tr("Installing AW client"), this);
-    progress->setAttribute(Qt::WA_DeleteOnClose);
-    progress->setIndeterminate(true);
-    progress->setStatus(tr("Starting download..."));
-    progress->show();
-
-    const QPointer<ProgressDialog> guard(progress);
-    const QFuture<void> future = QtConcurrent::run([this, gameDir, guard, notifyWhenDone, launchWhenReady]() {
-        auto report = [&](const QString &text, int pct) {
-            QMetaObject::invokeMethod(this, [guard, text, pct]() {
-                if (!guard)
-                    return;
-                guard->setStatus(text);
-                if (pct < 0)
-                    guard->setIndeterminate(true);
-                else
-                    guard->setProgress(pct, 100);
-            }, Qt::QueuedConnection);
-        };
-
-        QString error;
-        report(QObject::tr("Downloading S1-CLL..."), 8);
-        const QString dest = QDir(gameDir).filePath(QStringLiteral("s1.exe"));
-        const bool ok = Downloader::downloadToFile(
-            QStringLiteral("https://github.com/MestreTM/s1-cll/releases/latest/download/s1.exe"),
-            dest, error,
-            [&](qint64 got, qint64 total) {
-                const int pct = (total > 0) ? int(got * 90 / total) : 15;
-                report(QObject::tr("Downloading S1-CLL..."), pct);
-            },
-            10 * 60 * 1000);
-        if (ok)
+    DownloadCenter::run(this, tr("Installing AW client"),
+        [this, gameDir](QString &error, const std::function<void(const QString &, int)> &report,
+                        const CancelHandle &canc) -> bool {
+            const auto check = [&canc]() { return !canc || *canc; };
+            report(QObject::tr("Downloading S1-CLL..."), 8);
+            const QString dest = QDir(gameDir).filePath(QStringLiteral("s1.exe"));
+            const bool ok = Downloader::downloadToFile(
+                QStringLiteral("https://github.com/MestreTM/s1-cll/releases/latest/download/s1.exe"),
+                dest, error,
+                [&](qint64 got, qint64 total) {
+                    const int pct = (total > 0) ? int(got * 90 / total) : 15;
+                    report(QObject::tr("Downloading S1-CLL..."), pct);
+                },
+                10 * 60 * 1000, check);
+            if (!ok)
+                return false;
             UpdateService::stampFile(QStringLiteral("s1-cll"), QString(), dest);
-
-        QMetaObject::invokeMethod(this, [this, guard, ok, error, notifyWhenDone, launchWhenReady]() {
+            return true;
+        },
+        [this, notifyWhenDone, launchWhenReady](bool ok, const QString &error) {
             if (ok) {
                 m_settings.awClientReady = true;
                 m_settings.saveToIni();
             }
             if (ok && !notifyWhenDone) {
-                if (guard)
-                    guard->close();
                 if (launchWhenReady
-                    && QDateTime::currentMSecsSinceEpoch() >= m_blockLaunchUntil)
+                        && QDateTime::currentMSecsSinceEpoch() >= m_blockLaunchUntil)
                     emit launchRequested(m_gameId, selectedMode());
                 return;
             }
-            if (guard)
-                guard->close();
+            // A stopped download is the user's decision; the row already says so.
+            if (error == tr("Cancelled."))
+                return;
             if (ok && notifyWhenDone)
                 QMessageBox::information(this, tr("Advanced Warfare"),
                                          tr("Download complete. The client is ready in the game folder."));
             else if (!ok)
                 QMessageBox::warning(this, tr("Advanced Warfare"),
                                      error.isEmpty() ? tr("Failed to install the client.") : error);
-        }, Qt::QueuedConnection);
-    });
-    Q_UNUSED(future);
+        });
+}
+
+// Ticking the box is an order, not a plan: ReShade goes into Plutonium now,
+// through the same cancellable panel everything else uses, so the user can
+// start a game with it while the install is still running - and without a
+// modal box in the way. Only the first install waits here; once the vault
+// exists, the launch path (prepareReShade) sorts the build.
+void PlayPage::installReShadeOnTick()
+{
+    if (QolService::reShadeInstalled(m_settings)
+        && QDir(QolService::reShadeVault(m_settings)).exists())
+        return;
+    DownloadCenter::run(this, tr("Installing ReShade"),
+        [this, snap = m_settings](QString &error,
+                                  const std::function<void(const QString &, int)> &report,
+                                  const CancelHandle &canc) -> bool {
+            Q_UNUSED(canc);
+            report(tr("Staging ReShade into Plutonium..."), 15);
+            QString err;
+            const QolService::ReShadeMode mode = snap.launchOnline
+                ? QolService::ReShadeMode::Online : QolService::ReShadeMode::Lan;
+            const bool ok = QolService::applyReShadeMode(snap, mode,
+                                                         snap.launchDlss5, err);
+            error = err;
+            return ok;
+        },
+        [this](bool ok, const QString &error) {
+            if (ok || error.isEmpty() || error == tr("Cancelled."))
+                return;
+            QMessageBox::warning(this, tr("ReShade"), error);
+        });
 }
 
 void PlayPage::retranslate()

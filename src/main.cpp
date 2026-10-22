@@ -1,4 +1,5 @@
 #include "AppSettings.h"
+#include "ArchiveTool.h"
 #include "Version.h"
 #include "GameLauncher.h"
 #include "Theme.h"
@@ -285,6 +286,12 @@ int main(int argc, char *argv[])
     QApplication::setApplicationVersion(QStringLiteral(CLL_VERSION));
     QApplication::setOrganizationName(QOL_AUTHOR);
     QDir::setCurrent(QCoreApplication::applicationDirPath());
+
+    // The exe carries 7z.exe/7z.dll. Unpacking them here means extraction,
+    // mod installs and the kit importer never ask the player to install
+    // 7-Zip, and no download prompt can appear for it.
+    if (!ArchiveTool::ensureBundledSevenZip())
+        qWarning() << "[main] bundled 7-Zip not available; extraction falls back to the system copy";
 
     QCommandLineParser parser;
     // Accepts "-nogui", "-gameid", etc. with a single dash

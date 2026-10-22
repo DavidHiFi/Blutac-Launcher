@@ -1,4 +1,4 @@
-; Quality of Life Mod Manager - Windows installer (NSIS 3, per-user, no admin).
+; Blutac Launcher - Windows installer (NSIS 3, per-user, no admin).
 ;
 ; Built by scripts\build-setup.ps1, which passes DIST (staged dist tree),
 ; VERSION (from src/Version.h) and OUTFILE on the makensis command line:
@@ -29,9 +29,9 @@
 Var PackageTest
 Var PackageTestDir
 
-Name "Quality of Life Mod Manager"
+Name "Blutac Launcher"
 OutFile "${OUTFILE}"
-InstallDir "$LOCALAPPDATA\Programs\Quality of Life Mod Manager"
+InstallDir "$LOCALAPPDATA\Programs\Blutac Launcher"
 InstallDirRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "InstallLocation"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
@@ -40,16 +40,16 @@ Icon "${__FILEDIR__}\..\resources\icons\icon.ico"
 UninstallIcon "${__FILEDIR__}\..\resources\icons\icon.ico"
 
 VIProductVersion "${VERSION}.0"
-VIAddVersionKey "ProductName" "Quality of Life Mod Manager"
+VIAddVersionKey "ProductName" "Blutac Launcher"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "CompanyName" "DavidHiFi"
 VIAddVersionKey "LegalCopyright" "Licensed under the GNU Lesser General Public License v3"
-VIAddVersionKey "FileDescription" "Quality of Life Mod Manager Setup"
+VIAddVersionKey "FileDescription" "Blutac Launcher Setup"
 
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\QualityOfLifeModManager.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Run Quality of Life Mod Manager now"
+!define MUI_FINISHPAGE_RUN_TEXT "Run Blutac Launcher now"
 !define MUI_LICENSEPAGE_TEXT_TOP "This app is free software under the GNU Lesser General Public License v3. The installer carries its whole runtime, so no extra downloads are needed."
 !define MUI_LICENSEPAGE_BUTTON "Install"
 
@@ -73,11 +73,11 @@ Function .onInit
   ${EndIf}
 
   ${IfNot} ${RunningX64}
-    MessageBox MB_ICONSTOP "Quality of Life Mod Manager needs 64-bit Windows.$\nThis machine is 32-bit, so the app cannot run here."
+    MessageBox MB_ICONSTOP "Blutac Launcher needs 64-bit Windows.$\nThis machine is 32-bit, so the app cannot run here."
     Abort
   ${EndIf}
   ${IfNot} ${AtLeastWin10}
-    MessageBox MB_ICONSTOP "Quality of Life Mod Manager needs Windows 10 or later.$\nQt 6 does not run on older Windows."
+    MessageBox MB_ICONSTOP "Blutac Launcher needs Windows 10 or later.$\nQt 6 does not run on older Windows."
     Abort
   ${EndIf}
 FunctionEnd
@@ -91,7 +91,7 @@ Function CloseRunningApp
     Delete "$INSTDIR\uninstall.probe"
     Rename "$INSTDIR\QualityOfLifeModManager.exe" "$INSTDIR\uninstall.probe"
     ${If} ${Errors}
-      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Quality of Life Mod Manager is still running.$\nClose it (check the system tray), then press Retry." IDRETRY retry
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Blutac Launcher is still running.$\nClose it (check the system tray), then press Retry." IDRETRY retry
       Abort "Install cancelled while the app was running."
     ${Else}
       Rename "$INSTDIR\uninstall.probe" "$INSTDIR\QualityOfLifeModManager.exe"
@@ -157,7 +157,7 @@ Section "Install"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "DisplayName" "Quality of Life Mod Manager"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "DisplayName" "Blutac Launcher"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "Publisher" "DavidHiFi"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "DisplayIcon" "$INSTDIR\QualityOfLifeModManager.exe"
@@ -167,10 +167,10 @@ Section "Install"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "NoRepair" 1
 
-  CreateDirectory "$SMPROGRAMS\Quality of Life Mod Manager"
-  CreateShortCut "$SMPROGRAMS\Quality of Life Mod Manager\Quality of Life Mod Manager.lnk" "$INSTDIR\QualityOfLifeModManager.exe" "" "$INSTDIR\QualityOfLifeModManager.exe" 0
-  CreateShortCut "$SMPROGRAMS\Quality of Life Mod Manager\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
-  CreateShortCut "$DESKTOP\Quality of Life Mod Manager.lnk" "$INSTDIR\QualityOfLifeModManager.exe" "" "$INSTDIR\QualityOfLifeModManager.exe" 0
+  CreateDirectory "$SMPROGRAMS\Blutac Launcher"
+  CreateShortCut "$SMPROGRAMS\Blutac Launcher\Blutac Launcher.lnk" "$INSTDIR\QualityOfLifeModManager.exe" "" "$INSTDIR\QualityOfLifeModManager.exe" 0
+  CreateShortCut "$SMPROGRAMS\Blutac Launcher\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+  CreateShortCut "$DESKTOP\Blutac Launcher.lnk" "$INSTDIR\QualityOfLifeModManager.exe" "" "$INSTDIR\QualityOfLifeModManager.exe" 0
   install_done:
 SectionEnd
 
@@ -199,10 +199,10 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\tools"
   RMDir /r "$INSTDIR\cache"
   Delete "$INSTDIR\Uninstall.exe"
-  Delete "$SMPROGRAMS\Quality of Life Mod Manager\Quality of Life Mod Manager.lnk"
-  Delete "$SMPROGRAMS\Quality of Life Mod Manager\Uninstall.lnk"
-  RMDir "$SMPROGRAMS\Quality of Life Mod Manager"
-  Delete "$DESKTOP\Quality of Life Mod Manager.lnk"
+  Delete "$SMPROGRAMS\Blutac Launcher\Blutac Launcher.lnk"
+  Delete "$SMPROGRAMS\Blutac Launcher\Uninstall.lnk"
+  RMDir "$SMPROGRAMS\Blutac Launcher"
+  Delete "$DESKTOP\Blutac Launcher.lnk"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager"
   ; QualityOfLife.ini is deliberately left behind, so a reinstall keeps
   ; the user's settings (same rule as scripts\install.ps1).
@@ -216,7 +216,7 @@ Function un.CloseRunningApp
     Delete "$INSTDIR\uninstall.probe"
     Rename "$INSTDIR\QualityOfLifeModManager.exe" "$INSTDIR\uninstall.probe"
     ${If} ${Errors}
-      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Quality of Life Mod Manager is still running.$\nClose it (check the system tray), then press Retry." IDRETRY retry
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Blutac Launcher is still running.$\nClose it (check the system tray), then press Retry." IDRETRY retry
       Abort "Uninstall cancelled while the app was running."
     ${Else}
       Rename "$INSTDIR\uninstall.probe" "$INSTDIR\QualityOfLifeModManager.exe"

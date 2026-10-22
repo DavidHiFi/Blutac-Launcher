@@ -163,8 +163,19 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
     m_progress->setValue(0);
     m_progress->setVisible(false);
     m_progressLabel->setVisible(false);
+    m_cancelBtn = new QPushButton(tr("Cancelar"), installCard);
+    m_cancelBtn->setVisible(false);
+    auto *progressRow = new QHBoxLayout();
+    progressRow->setSpacing(8);
+    progressRow->addWidget(m_progress, 1);
+    progressRow->addWidget(m_cancelBtn);
     installLayout->addWidget(m_progressLabel);
-    installLayout->addWidget(m_progress);
+    installLayout->addLayout(progressRow);
+    connect(m_cancelBtn, &QPushButton::clicked, this, [this]() {
+        if (m_cancel)
+            m_cancel->cancel();
+        m_cancelBtn->setEnabled(false); // the stop has landed; the row shows it stop
+    });
     root->addWidget(installCard);
 
     connect(m_gameCombo, &QComboBox::currentTextChanged, this, &ModsPage::onGameSelected);
@@ -180,6 +191,7 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
         setBusy(false);
         m_progress->setVisible(false);
         m_progressLabel->setVisible(false);
+        m_cancelBtn->setVisible(false);
         const QString err = m_installWatcher.result();
         const Job job = m_job;
         m_job = Job::None;
@@ -220,11 +232,17 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
             m_pendingGithub = false;
             m_job = Job::Install;
             setBusy(true);
+            // A fresh install gets a fresh stop flag; a cancelled one from
+            // the last job must never trip this run.
+            m_cancel = std::make_shared<CancelState>();
+            m_cancelBtn->setEnabled(true);
+            m_cancelBtn->setVisible(true);
             m_progress->setVisible(true);
             m_progressLabel->setVisible(true);
             m_progress->setRange(0, 100);
             m_progress->setValue(0);
             m_progressLabel->setText(github ? tr("Downloading pack...") : tr("Extraindo pacote..."));
+            const CancelHandle cancel = m_cancel;
             auto future = QtConcurrent::run([=]() -> QString {
                 if (github) {
                     QList<GithubModInstaller::FailedDownload> failed;
@@ -237,7 +255,7 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
                                 m_progressLabel->setText(label);
                             }, Qt::QueuedConnection);
                         },
-                        &failed);
+                        &failed, cancel);
                     QMetaObject::invokeMethod(this, [this, failed]() {
                         m_lastGhFailed = failed;
                     }, Qt::BlockingQueuedConnection);
@@ -254,10 +272,17 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
                             m_progress->setValue(int(pct * 0.7));
                             m_progressLabel->setText(tr("Extraindo pacote... %1%").arg(pct));
                         }, Qt::QueuedConnection);
-                    });
+                    },
+                    [cancel]() { return cancel && *cancel; });
                 if (!extracted) {
                     safeRemoveTempDir(tempDir);
                     return extractError.isEmpty() ? QObject::tr("Falha ao extrair o arquivo.") : extractError;
+                }
+                // The copy phase swaps live files in the game folders, one
+                // rename from a stop to finished; do not sit on the flag here.
+                if (cancel && *cancel) {
+                    safeRemoveTempDir(tempDir);
+                    return QObject::tr("Cancelled.");
                 }
                 QMetaObject::invokeMethod(this, [this]() {
                     m_progress->setValue(72);
@@ -281,6 +306,9 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
                 QMessageBox::information(this, tr("Mods"), tr("Mod removido."));
             else
                 QMessageBox::information(this, tr("Mods"), tr("Mod instalado com sucesso."));
+        } else if (err == QLatin1String("Cancelled.")) {
+            // A stopped install is the user's choice; whatever already landed
+            // landed as a prefix and the list refresh above shows it.
         } else if (err == QLatin1String("__PARTIAL__")) {
             QStringList lines;
             QString clip;
@@ -318,6 +346,7 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
         setBusy(false);
         m_progress->setVisible(false);
         m_progressLabel->setVisible(false);
+        m_cancelBtn->setVisible(false);
         switch (m_sevenZipWatcher.result()) {
         case 0: Dialogs::info(this, Dialogs::Msg::SevenZipSuccess, m_settings); break;
         case 1: Dialogs::info(this, Dialogs::Msg::SevenZipFailDownload, m_settings); break;

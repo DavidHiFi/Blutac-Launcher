@@ -1,8 +1,8 @@
 #include "QolPage.h"
 #include "VersionCompare.h"
 #include "AppSettings.h"
+#include "DownloadCenter.h"
 #include "GameLauncher.h"
-#include "ProgressDialog.h"
 #include "QolBackups.h"
 #include "QolService.h"
 #include "Version.h"
@@ -89,8 +89,8 @@ QolPage::QolPage(AppSettings &settings, QWidget *parent)
     root->addWidget(section(inner, tr("RESHADE")));
     m_reshade = addRow(root, tr("VISUALS"), tr("ReShade"),
                        tr("Cinematic colour grading for every Plutonium game. Plutonium clears its bin folder on "
-                          "every start, so play with the ReShade option on the game page (or start the watchdog "
-                          "here) and the files are put back the moment the game opens."));
+                          "every start; with the ReShade option on the game page ticked, the files come back "
+                          "quietly the moment the game opens, and your in-game preset edits are kept."));
     m_dlss = addRow(root, tr("LAN ONLY"), tr("DLSS 5 Neural Rendering"),
                     tr("NVIDIA DLSS 5 in Black Ops II, through the DLSS5-Feeder ReShade add-on. Add-ons need the "
                        "full build of ReShade, which the manager only puts in place for LAN - online keeps the "
@@ -153,8 +153,9 @@ QolPage::QolPage(AppSettings &settings, QWidget *parent)
                 return;
             }
             runJob(tr("Installing Quality of Life for %1").arg(m.gameTitle),
-                   [this, m](QString &err, const std::function<void(const QString &, int)> &p) {
-                       return QolService::installMod(m_settings, m, p, err);
+                   [this, m](QString &err, const std::function<void(const QString &, int)> &p,
+                             const CancelHandle &canc) {
+                       return QolService::installMod(m_settings, m, p, err, canc);
                    });
         });
         connect(m_modRows[i].secondary, &QPushButton::clicked, this, [this, m]() {
@@ -171,8 +172,9 @@ QolPage::QolPage(AppSettings &settings, QWidget *parent)
             return;
         }
         runJob(tr("Installing the HD texture pack"),
-               [this](QString &err, const std::function<void(const QString &, int)> &p) {
-                   return QolService::installPack(m_settings, QolService::Pack::Textures, p, err);
+               [this](QString &err, const std::function<void(const QString &, int)> &p,
+                      const CancelHandle &canc) {
+                   return QolService::installPack(m_settings, QolService::Pack::Textures, p, err, canc);
                });
     });
     connect(m_sounds.primary, &QPushButton::clicked, this, [this]() {
@@ -184,8 +186,9 @@ QolPage::QolPage(AppSettings &settings, QWidget *parent)
             return;
         }
         runJob(tr("Installing the custom sounds"),
-               [this](QString &err, const std::function<void(const QString &, int)> &p) {
-                   return QolService::installPack(m_settings, QolService::Pack::Sounds, p, err);
+               [this](QString &err, const std::function<void(const QString &, int)> &p,
+                      const CancelHandle &canc) {
+                   return QolService::installPack(m_settings, QolService::Pack::Sounds, p, err, canc);
                });
     });
     connect(m_controller.primary, &QPushButton::clicked, this, [this]() {
@@ -204,8 +207,9 @@ QolPage::QolPage(AppSettings &settings, QWidget *parent)
         if (pack.isEmpty())
             return;
         runJob(tr("Installing controller icons"),
-               [this, pack](QString &err, const std::function<void(const QString &, int)> &p) {
-                   return QolService::installController(m_settings, pack, p, err);
+               [this, pack](QString &err, const std::function<void(const QString &, int)> &p,
+                            const CancelHandle &canc) {
+                   return QolService::installController(m_settings, pack, p, err, canc);
                });
     });
     connect(m_controller.secondary, &QPushButton::clicked, this, [this]() {
@@ -229,11 +233,6 @@ QolPage::QolPage(AppSettings &settings, QWidget *parent)
         }
         refresh();
     });
-    connect(m_reshade.secondary, &QPushButton::clicked, this, [this]() {
-        QString err;
-        if (!GameLauncher::startReShadeWatchdog(m_settings.plutoniumInstance, err))
-            QMessageBox::warning(this, tr("ReShade"), err);
-    });
     connect(m_dlss.primary, &QPushButton::clicked, this, [this]() {
         QString err;
         if (QolService::dlssPayloadReady(m_settings)) {
@@ -256,7 +255,8 @@ QolPage::QolPage(AppSettings &settings, QWidget *parent)
         if (donor.isEmpty())
             return;
         runJob(tr("Importing the DLSS 5 payload"),
-               [this, donor](QString &e, const std::function<void(const QString &, int)> &p) {
+               [this, donor](QString &e, const std::function<void(const QString &, int)> &p,
+                             const CancelHandle &) {
                    p(tr("Copying the DLSS 5 runtimes"), 10);
                    return QolService::importDlssPayload(m_settings, donor, e);
                });
@@ -278,7 +278,8 @@ QolPage::QolPage(AppSettings &settings, QWidget *parent)
         // does not overwrite the copies taken before anything was installed.
         auto summary = std::make_shared<QStringList>();
         runJob(tr("Backing up your files"),
-               [this, summary](QString &err, const std::function<void(const QString &, int)> &p) {
+               [this, summary](QString &err, const std::function<void(const QString &, int)> &p,
+                               const CancelHandle &) {
                    for (const QString &k : QolBackups::automaticKinds()) {
                        QString msg;
                        if (QolBackups::backup(m_settings, k, false, p, msg) == QolBackups::Result::Failed) {
@@ -307,7 +308,8 @@ QolPage::QolPage(AppSettings &settings, QWidget *parent)
                                        "now. Files added since are left alone.").arg(titles.join(QStringLiteral(", ")))))
             return;
         runJob(tr("Putting your files back"),
-               [this, have](QString &err, const std::function<void(const QString &, int)> &p) {
+               [this, have](QString &err, const std::function<void(const QString &, int)> &p,
+                            const CancelHandle &) {
                    for (const QString &k : have)
                        if (!QolBackups::restore(m_settings, k, p, err))
                            return false;
@@ -325,14 +327,16 @@ QolPage::QolPage(AppSettings &settings, QWidget *parent)
                                              .arg(info.title, info.when.toString(QStringLiteral("d MMM yyyy HH:mm")))))
                     return;
                 runJob(tr("Putting back %1").arg(info.title),
-                       [this, kind](QString &err, const std::function<void(const QString &, int)> &p) {
+                       [this, kind](QString &err, const std::function<void(const QString &, int)> &p,
+                                    const CancelHandle &) {
                            return QolBackups::restore(m_settings, kind, p, err);
                        });
                 return;
             }
             auto message = std::make_shared<QString>();
             runJob(tr("Backing up %1").arg(info.title),
-                   [this, kind, message](QString &err, const std::function<void(const QString &, int)> &p) {
+                   [this, kind, message](QString &err, const std::function<void(const QString &, int)> &p,
+                                         const CancelHandle &) {
                        if (QolBackups::backup(m_settings, kind, false, p, *message) == QolBackups::Result::Failed) {
                            err = *message;
                            return false;
@@ -377,7 +381,8 @@ void QolPage::backupMenu(const QString &kind)
             return;
         auto message = std::make_shared<QString>();
         runJob(tr("Backing up %1").arg(info.title),
-               [this, kind, message](QString &err, const std::function<void(const QString &, int)> &p) {
+               [this, kind, message](QString &err, const std::function<void(const QString &, int)> &p,
+                                     const CancelHandle &) {
                    if (QolBackups::backup(m_settings, kind, true, p, *message) == QolBackups::Result::Failed) {
                        err = *message;
                        return false;
@@ -436,7 +441,8 @@ void QolPage::removeWithRestore(const QString &title, const QString &question, c
     }
     if (box.clickedButton() == withRestore) {
         runJob(tr("Putting back %1").arg(info.title),
-               [this, backupKind](QString &e, const std::function<void(const QString &, int)> &p) {
+               [this, backupKind](QString &e, const std::function<void(const QString &, int)> &p,
+                                  const CancelHandle &) {
                    return QolBackups::restore(m_settings, backupKind, p, e);
                });
         return;
@@ -450,8 +456,9 @@ bool QolPage::installSeriesMod(const QString &gameCode)
     if (!m.released)
         return false;
     runJob(tr("Installing Quality of Life for %1").arg(m.gameTitle),
-           [this, m](QString &err, const std::function<void(const QString &, int)> &p) {
-               return QolService::installMod(m_settings, m, p, err);
+           [this, m](QString &err, const std::function<void(const QString &, int)> &p,
+                     const CancelHandle &canc) {
+               return QolService::installMod(m_settings, m, p, err, canc);
            });
     return true;
 }
@@ -564,8 +571,9 @@ void QolPage::refresh()
     m_reshade.primary->setText(rs ? tr("Remove") : tr("Install"));
     m_reshade.primary->setProperty("cssClass", rs ? "danger" : "primary");
     m_reshade.primary->setEnabled(pluto);
-    m_reshade.secondary->setText(tr("Start watchdog"));
-    m_reshade.secondary->setVisible(rs);
+    // No manual watcher button: with the ReShade option ticked on the game
+    // page, every launch starts it quietly on its own.
+    m_reshade.secondary->setVisible(false);
 
     const bool dlss = QolService::dlssPayloadReady(m_settings);
     m_dlss.status->setText(dlss ? tr("Imported: %1 Used on LAN launches of Black Ops II.")
@@ -646,41 +654,23 @@ void QolPage::refreshBackups()
 }
 
 void QolPage::runJob(const QString &title,
-                     const std::function<bool(QString &, const std::function<void(const QString &, int)> &)> &job,
+                     const std::function<bool(QString &,
+                                              const std::function<void(const QString &, int)> &,
+                                              const CancelHandle &)> &job,
                      const std::function<void()> &after)
 {
-    auto *progress = new ProgressDialog(title, this);
-    progress->setAttribute(Qt::WA_DeleteOnClose);
-    progress->setIndeterminate(true);
-    progress->setStatus(tr("Starting..."));
-    progress->show();
-    const QPointer<ProgressDialog> guard(progress);
-    const QPointer<QolPage> self(this);
-    auto future = QtConcurrent::run([self, guard, job, title, after]() {
-        auto report = [guard](const QString &text, int pct) {
-            QMetaObject::invokeMethod(qApp, [guard, text, pct]() {
-                if (!guard) return;
-                guard->setStatus(text);
-                if (pct < 0) guard->setIndeterminate(true);
-                else guard->setProgress(pct, 100);
-            }, Qt::QueuedConnection);
-        };
-        QString error;
-        const bool ok = job(error, report);
-        QMetaObject::invokeMethod(qApp, [self, guard, ok, error, title, after]() {
-            if (guard)
-                guard->close();
-            if (!self)
-                return;
-            if (!ok)
-                QMessageBox::warning(self, title, error.isEmpty() ? tr("The install failed.") : error);
-            else if (after)
-                after();
-            self->refresh();
-            emit self->installedChanged();
-        }, Qt::QueuedConnection);
+    // The download panel at the bottom of the window owns the row now. The
+    // page stays usable while the job runs, and the row's Cancel stops the
+    // download and the unpack - the last stretch, where the files would land
+    // half-written, locks itself.
+    DownloadCenter::run(this, title, job, [this, title, after](bool ok, const QString &error) {
+        if (!ok && error != tr("Cancelled."))
+            QMessageBox::warning(this, title, error.isEmpty() ? tr("The install failed.") : error);
+        if (ok && after)
+            after();
+        refresh();
+        emit installedChanged();
     });
-    Q_UNUSED(future);
 }
 
 bool QolPage::confirm(const QString &title, const QString &text)

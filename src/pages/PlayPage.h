@@ -37,6 +37,7 @@ private:
     void openClientPicker();
     void installBo3Client(const QString &kind, bool notifyWhenDone, bool launchWhenReady);
     void installS1Client(bool notifyWhenDone, bool launchWhenReady);
+    void installReShadeOnTick();
 public:
     void retranslate();
 private:

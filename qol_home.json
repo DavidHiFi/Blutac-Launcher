@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "updated": "2026-09-19",
-  "title": "Quality of Life Mod Manager",
+  "title": "Blutac Launcher",
   "note": "Home feed. A copy ships inside the exe; the app refreshes from this file on GitHub, so mods can be added here without a release.",
   "featured": [
     "t6-quality-of-life",

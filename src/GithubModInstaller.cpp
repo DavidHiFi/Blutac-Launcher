@@ -695,12 +695,18 @@ QString apply(const Manifest &man,
               const QString &plutoniumRoot,
               const QString &gameRoot,
               const ProgressFn &onProgress,
-              QList<FailedDownload> *failedOut)
+              QList<FailedDownload> *failedOut,
+              const CancelHandle &cancel)
 {
     if (!man.valid)
         return man.error.isEmpty() ? QObject::tr("Invalid GitHub manifest.") : man.error;
     if (plutoniumRoot.isEmpty())
         return QObject::tr("Set the Plutonium folder in Settings first.");
+
+    // Read between stages and inside every transfer. A stop is clean before a
+    // file lands; backups and renames are per-file, so the checkpoint keeps
+    // whatever finished as a prefix of the install.
+    const auto stopped = [&cancel]() -> bool { return cancel && *cancel; };
 
     const QString pu = QDir::cleanPath(QFileInfo(plutoniumRoot).absoluteFilePath());
     const QString gameAbs = gameRoot.isEmpty()
@@ -800,6 +806,8 @@ QString apply(const Manifest &man,
             QString error;
             bool ok = false;
             for (int attempt = 1; attempt <= 10 && !ok; ++attempt) {
+                if (stopped())
+                    return QObject::tr("Cancelled.");
                 QFile::remove(packPath);
                 if (onProgress) {
                     onProgress(attempt > 1 ? 8 : 4,
@@ -809,8 +817,10 @@ QString apply(const Manifest &man,
                 }
                 if (attempt > 1)
                     QThread::msleep(qMin(12000, 1500 * attempt));
+                if (stopped())
+                    return QObject::tr("Cancelled.");
                 ok = Downloader::downloadToFile(man.bundle.url, packPath, error, nullptr,
-                                                timeoutForSize(man.bundle.size));
+                                                timeoutForSize(man.bundle.size), stopped);
                 if (ok && !man.bundle.sha256.isEmpty() && fileSha256(packPath) != man.bundle.sha256) {
                     ok = false;
                     error = QObject::tr("Checksum mismatch: %1").arg(QFileInfo(packPath).fileName());
@@ -839,7 +849,7 @@ QString apply(const Manifest &man,
                                                      if (onProgress)
                                                          onProgress(40 + int(pct * 0.25),
                                                                     QObject::tr("Extracting pack... %1%").arg(pct));
-                                                 })) {
+                                                 }, stopped)) {
                 QDir(tempRoot).removeRecursively();
                 return extractError.isEmpty() ? QObject::tr("Failed to extract the pack.") : extractError;
             }
@@ -986,6 +996,8 @@ QString apply(const Manifest &man,
     int index = 0;
     for (const RemoteFile &f : man.files) {
         ++index;
+        if (stopped())
+            return QObject::tr("Cancelled.");
         QString tag, destRel;
         destOf(f.root, f.relpath, tag, destRel);
         if (tag == QLatin1String("game") && gameAbs.isEmpty())
@@ -1012,6 +1024,8 @@ QString apply(const Manifest &man,
         QString error;
         bool ok = false;
         for (int attempt = 1; attempt <= 10 && !ok; ++attempt) {
+            if (stopped())
+                return QObject::tr("Cancelled.");
             QFile::remove(part);
             if (attempt > 1) {
                 if (onProgress) {
@@ -1019,8 +1033,10 @@ QString apply(const Manifest &man,
                                QObject::tr("Retry %1/10: %2").arg(attempt).arg(QFileInfo(f.relpath).fileName()));
                 }
                 QThread::msleep(qMin(12000, 1500 * attempt));
+                if (stopped())
+                    return QObject::tr("Cancelled.");
             }
-            ok = Downloader::downloadToFile(f.url, part, error, nullptr, timeoutForSize(f.size));
+            ok = Downloader::downloadToFile(f.url, part, error, nullptr, timeoutForSize(f.size), stopped);
             if (ok && (!f.md5.isEmpty() || !f.sha256.isEmpty()) && !fileMatches(part, f.md5, f.sha256)) {
                 ok = false;
                 error = QObject::tr("Checksum mismatch: %1").arg(QFileInfo(f.relpath).fileName());

@@ -1,14 +1,15 @@
 #pragma once
 
 // Single source for the app version and brand. Bump the version before a release.
-#define CLL_VERSION "2.2.3"
+#define CLL_VERSION "2.3.0"
 #define CLL_USER_AGENT "QualityOfLifeModManager/" CLL_VERSION
 
 // Brand strings. CLL_* macro names are kept so the Cod LAN Launcher upstream
-// stays easy to merge; the values are this fork's.
-#define QOL_APP_NAME        "Quality of Life Mod Manager"
-#define QOL_BRAND_TITLE     "Quality of Life"
-#define QOL_BRAND_SUBTITLE  "Mod manager"
+// stays easy to merge; the values are this fork's. The repo/exe/feed names
+// below stay as they are so installed copies keep self-updating.
+#define QOL_APP_NAME        "Blutac Launcher"
+#define QOL_BRAND_TITLE     "Blutac"
+#define QOL_BRAND_SUBTITLE  "Launcher"
 #define QOL_AUTHOR          "DavidHiFi"
 #define QOL_INI_NAME        "QualityOfLife.ini"
 #define QOL_REPO_URL        "https://github.com/DavidHiFi/QualityOfLifeModManager"

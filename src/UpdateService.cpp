@@ -2,8 +2,9 @@
 #include "VersionCompare.h"
 #include "AppSettings.h"
 #include "ArchiveTool.h"
+#include "CancelState.h"
+#include "DownloadCenter.h"
 #include "Downloader.h"
-#include "ProgressDialog.h"
 #include "SelfUpdate.h"
 #include "Version.h"
 
@@ -165,7 +166,8 @@ bool verifyDownload(const UpdateService::Item &it, const QString &tmp, QString &
 }
 
 bool applyItem(const UpdateService::Item &it, AppSettings &settings, QString &error,
-               const std::function<void(const QString &, int)> &progress)
+               const std::function<void(const QString &, int)> &progress,
+               const CancelHandle &cancel = {})
 {
     if (it.url.isEmpty()) {
         error = QCoreApplication::translate("UpdateService", "Missing download URL.");
@@ -174,13 +176,18 @@ bool applyItem(const UpdateService::Item &it, AppSettings &settings, QString &er
     const QString tmp = QDir::temp().filePath(
         QStringLiteral("cll_upd_%1_%2").arg(it.id, it.name));
     progress(QCoreApplication::translate("UpdateService", "Downloading %1...").arg(it.name), 8);
+    // A stop lands in the transfer itself (passed straight into the
+    // downloader). Past the download there is nothing safe to stop at: the
+    // staged file goes in, whatever it takes, so the flag is locked there.
     if (!Downloader::downloadToFile(it.url, tmp, error, [&](qint64 g, qint64 t) {
             const int pct = (t > 0) ? int(g * 80 / t) : 15;
             progress(QCoreApplication::translate("UpdateService", "Downloading %1...").arg(it.name), pct);
-        }, 30 * 60 * 1000)) {
+        }, 30 * 60 * 1000, [&cancel]() -> bool { return cancel && *cancel; })) {
         QFile::remove(tmp);
         return false;
     }
+    if (cancel)
+        cancel->lock();
     if (!verifyDownload(it, tmp, error)) {
         QFile::remove(tmp);
         return false;
@@ -652,43 +659,60 @@ bool prompt(QWidget *parent, AppSettings &settings, bool silentIfNone)
     if (dlg.exec() != QDialog::Accepted)
         return false;
 
-    auto *progress = new ProgressDialog(
-        QCoreApplication::translate("UpdateService", "Updating"), parent);
-    progress->setAttribute(Qt::WA_DeleteOnClose);
-    progress->setIndeterminate(true);
-    progress->show();
-
-    bool needQuit = false;
-    QString fail;
-    for (const Pending &p : pending) {
-        progress->setStatus(displayName(p.remote.id));
-        QString err;
-        const bool ok = applyItem(p.remote, settings, err, [&](const QString &text, int pct) {
-            progress->setStatus(text);
-            if (pct < 0)
-                progress->setIndeterminate(true);
-            else
-                progress->setProgress(pct, 100);
+    // The install runs as a panel row: no modal box holding a download for
+    // half an hour. Cancel works during any download; once one lands it is
+    // locked through the swap (applyItem does that), so nobody stops a file
+    // midway onto the game folders.
+    const CancelHandle cancel = std::make_shared<CancelState>();
+    const auto appliedLauncher = std::make_shared<std::atomic_bool>(false);
+    // The job writes settings on a worker thread, so it works on its own
+    // copy; the fields applyItem can change are merged back below, on the
+    // GUI thread, after the job settles.
+    const auto touched = std::make_shared<AppSettings>(settings);
+    DownloadCenter::run(parent,
+        QCoreApplication::translate("UpdateService", "Updating"),
+        [work = pending, cancel, appliedLauncher, touched](
+            QString &error, const std::function<void(const QString &, int)> &report,
+            const CancelHandle &) -> bool {
+            AppSettings local = *touched;
+            for (const Pending &p : work) {
+                report(displayName(p.remote.id), -1);
+                QString err;
+                const bool ok = applyItem(p.remote, local, err,
+                                          [&](const QString &text, int pct) { report(text, pct); },
+                                          cancel);
+                if (!ok) {
+                    error = err;
+                    return false;
+                }
+                if (p.remote.id == QLatin1String("launcher"))
+                    appliedLauncher->store(true);
+            }
+            *touched = local;
+            return true;
+        },
+        [parent, &settings, touched, appliedLauncher](bool ok, const QString &error) {
+            if (ok) {
+                settings.plutoniumInstance = touched->plutoniumInstance;
+                settings.bo3Client = touched->bo3Client;
+                settings.bo3ClientChosen = touched->bo3ClientChosen;
+                if (appliedLauncher->load()) {
+                    // The swap batch is scheduled; getting out of the way is
+                    // the last thing left for this instance to do.
+                    SelfUpdate::quitForSwap();
+                    return;
+                }
+                QMessageBox::information(parent,
+                                         QCoreApplication::translate("UpdateService", "Updates"),
+                                         QCoreApplication::translate("UpdateService", "Updates installed."));
+                return;
+            }
+            // A stopped download is the user's decision; the row already says so.
+            if (error == QCoreApplication::translate("UpdateService", "Cancelled."))
+                return;
+            QMessageBox::warning(parent,
+                                 QCoreApplication::translate("UpdateService", "Updates"), error);
         });
-        if (!ok) {
-            fail = err;
-            break;
-        }
-        if (p.remote.id == QLatin1String("launcher"))
-            needQuit = true;
-    }
-    progress->close();
-    if (!fail.isEmpty()) {
-        QMessageBox::warning(parent,
-                             QCoreApplication::translate("UpdateService", "Updates"),
-                             fail);
-        return false;
-    }
-    if (needQuit)
-        return true;
-    QMessageBox::information(parent,
-                             QCoreApplication::translate("UpdateService", "Updates"),
-                             QCoreApplication::translate("UpdateService", "Updates installed."));
     return false;
 }
 

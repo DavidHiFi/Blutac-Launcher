@@ -1,4 +1,5 @@
 #pragma once
+#include "DownloadCenter.h"
 #include <QWidget>
 #include <QList>
 #include <functional>
@@ -11,8 +12,9 @@ class AppSettings;
 
 // The Quality of Life series page: one row per game's mod (install, update,
 // remove), the Black Ops II extras (HD textures, custom sounds, controller
-// icons), ReShade (install, start the watchdog) and backups of the player's
-// own files. This is the part the upstream launcher does not have.
+// icons), ReShade (install, then the quiet watcher handles the game) and
+// backups of the player's own files. This is the part the upstream launcher
+// does not have.
 class QolPage : public QWidget
 {
     Q_OBJECT
@@ -35,7 +37,9 @@ private:
         QPushButton *tertiary = nullptr;   // backup rows only
     };
     Row addRow(QVBoxLayout *into, const QString &kicker, const QString &title, const QString &desc);
-    void runJob(const QString &title, const std::function<bool(QString &, const std::function<void(const QString &, int)> &)> &job,
+    void runJob(const QString &title,
+                const std::function<bool(QString &, const std::function<void(const QString &, int)> &,
+                                         const CancelHandle &)> &job,
                 const std::function<void()> &after = {});
     bool confirm(const QString &title, const QString &text);
     void openUrl(const QString &url);

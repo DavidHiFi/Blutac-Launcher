@@ -1,6 +1,7 @@
 #include "ArchiveTool.h"
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -112,8 +113,41 @@ bool hasSevenZip()
     return !findSevenZip().isEmpty();
 }
 
+bool ensureBundledSevenZip()
+{
+    if (!findSevenZip().isEmpty())
+        return true;
+    // The exe carries the official 7z.exe and 7z.dll (7-Zip 26.05) in its
+    // resources. They land beside the app, where findSevenZip() looks first,
+    // and from then on extractArchive and every prompt that asked for a
+    // system 7-Zip are simply satisfied. If the folder cannot be written
+    // (a read-only install place), the old download flows still fire.
+    const QDir appDir(QCoreApplication::applicationDirPath());
+    const QString destDir = QDir::toNativeSeparators(appDir.filePath(QStringLiteral("7z")));
+    if (!appDir.mkpath(QStringLiteral("7z"))) {
+        qWarning() << "[ArchiveTool] could not create" << destDir;
+        return false;
+    }
+    for (const QString &f : {QStringLiteral("7z.exe"), QStringLiteral("7z.dll"), QStringLiteral("License.txt")}) {
+        QFile res(QStringLiteral(":/7zip/") + f);
+        if (!res.open(QIODevice::ReadOnly)) {
+            qWarning() << "[ArchiveTool] bundled resource missing:" << f;
+            return false;
+        }
+        const QByteArray data = res.readAll();
+        QFile out(QDir(destDir).filePath(f));
+        if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)
+                || out.write(data) != data.size()) {
+            qWarning() << "[ArchiveTool] could not write" << out.fileName();
+            return false;
+        }
+    }
+    return !findSevenZip().isEmpty();
+}
+
 bool extractToDirectory(const QString &archivePath, const QString &destDir, QString *errorOut,
-                            const std::function<void(int percent)> &onProgress)
+                            const std::function<void(int percent)> &onProgress,
+                            const std::function<bool()> &cancelled)
 {
     if (!QFileInfo::exists(archivePath)) {
         if (errorOut)
@@ -154,6 +188,16 @@ bool extractToDirectory(const QString &archivePath, const QString &destDir, QStr
         }
         if (acc.size() > 8000)
             acc = acc.right(2000);
+        // A cancel in the middle of an extraction: stop the process and
+        // report out. Whatever landed in destDir is discarded by the caller
+        // (it works in a temp folder first).
+        if (cancelled && cancelled()) {
+            proc.kill();
+            proc.waitForFinished(3000);
+            if (errorOut)
+                *errorOut = QObject::tr("Cancelled.");
+            return false;
+        }
     }
     acc += QString::fromLocal8Bit(proc.readAll());
     if (onProgress)

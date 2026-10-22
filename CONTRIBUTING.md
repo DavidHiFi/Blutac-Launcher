@@ -1,4 +1,4 @@
-# Contributing to Quality of Life Mod Manager
+# Contributing to Blutac Launcher
 
 Thanks for helping. Bug reports, ideas and pull requests are all welcome.
 

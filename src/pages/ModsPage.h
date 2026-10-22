@@ -3,6 +3,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFutureWatcher>
+#include "CancelState.h"
 #include "ModPreview.h"
 #include "GithubModInstaller.h"
 
@@ -60,6 +61,8 @@ private:
     QPushButton *m_deleteBtn = nullptr;
     QProgressBar *m_progress = nullptr;
     QLabel *m_progressLabel = nullptr;
+    QPushButton *m_cancelBtn = nullptr;  // stops the running install from the install card
+    CancelHandle m_cancel;               // fresh install: new flag, new button
     enum class Job { None, Install, Remove, Peek };
     QString m_pendingExtract;
     QString m_pendingArchive;

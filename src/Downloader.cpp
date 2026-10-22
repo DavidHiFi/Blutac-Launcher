@@ -13,12 +13,25 @@
 
 namespace Downloader {
 
+namespace {
+    // The cancel flag is read on a short timer inside the loop: a click lands
+    // within a fraction of a second, and abort() gets the socket out right
+    // away instead of waiting out the transfer.
+    constexpr int kCancelPollMs = 100;
+}
+
 bool downloadToFile(const QString &url, const QString &destPath, QString &error,
                      const std::function<void(qint64, qint64)> &onProgress,
                      int timeoutMs)
 {
-    QDir().mkpath(QFileInfo(destPath).absolutePath());
+    return downloadToFile(url, destPath, error, onProgress, timeoutMs, nullptr);
+}
 
+bool downloadToFile(const QString &url, const QString &destPath, QString &error,
+                     const std::function<void(qint64, qint64)> &onProgress,
+                     int timeoutMs, const std::function<bool()> &cancelled)
+{
+    QDir().mkpath(QFileInfo(destPath).absolutePath());
     QFile file(destPath);
     if (!file.open(QIODevice::WriteOnly)) {
         error = QObject::tr("Nao foi possivel criar o arquivo: %1").arg(destPath);
@@ -64,7 +77,23 @@ bool downloadToFile(const QString &url, const QString &destPath, QString &error,
     QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
     timeoutTimer.start(timeoutMs > 0 ? timeoutMs : 120000);
 
+    // Cancel: poll the flag a few times a second and pull the socket out.
+    bool flagged = false;
+    QTimer pollTimer;
+    if (cancelled) {
+        pollTimer.setInterval(kCancelPollMs);
+        QObject::connect(&pollTimer, &QTimer::timeout, reply, [reply, &flagged, cancelled]() {
+            if (!flagged && cancelled()) {
+                flagged = true;
+                reply->abort();
+            }
+        });
+        pollTimer.start();
+    }
+
     loop.exec();
+    if (pollTimer.isActive())
+        pollTimer.stop();
 
     drain();
     const bool flushed = file.flush();
@@ -83,7 +112,10 @@ bool downloadToFile(const QString &url, const QString &destPath, QString &error,
     const qint64 expected = (plainBody && declared.isValid()) ? declared.toLongLong() : -1;
 
     bool ok = reply->error() == QNetworkReply::NoError && timeoutTimer.isActive();
-    if (ok && (writeFailed || !flushed)) {
+    if (flagged) {
+        ok = false;
+        error = QObject::tr("Cancelled.");
+    } else if (ok && (writeFailed || !flushed)) {
         ok = false;
         error = QObject::tr("Could not write %1 to disk. It may be full, or the file may be in use.")
                     .arg(QDir::toNativeSeparators(destPath));
@@ -105,6 +137,12 @@ bool downloadToFile(const QString &url, const QString &destPath, QString &error,
 
 QByteArray downloadBytes(const QString &url, QString &error, int timeoutMs)
 {
+    return downloadBytes(url, error, timeoutMs, nullptr);
+}
+
+QByteArray downloadBytes(const QString &url, QString &error, int timeoutMs,
+                         const std::function<bool()> &cancelled)
+{
     QNetworkAccessManager manager;
     QNetworkRequest request{QUrl(url)};
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
@@ -117,12 +155,28 @@ QByteArray downloadBytes(const QString &url, QString &error, int timeoutMs)
     timeoutTimer.setSingleShot(true);
     QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
     timeoutTimer.start(timeoutMs > 0 ? timeoutMs : 60000);
+    bool flagged = false;
+    QTimer pollTimer;
+    if (cancelled) {
+        pollTimer.setInterval(kCancelPollMs);
+        QObject::connect(&pollTimer, &QTimer::timeout, reply, [reply, &flagged, cancelled]() {
+            if (!flagged && cancelled()) {
+                flagged = true;
+                reply->abort();
+            }
+        });
+        pollTimer.start();
+    }
     loop.exec();
+    if (pollTimer.isActive())
+        pollTimer.stop();
 
     QByteArray data;
-    const bool ok = reply->error() == QNetworkReply::NoError && timeoutTimer.isActive();
+    const bool ok = !flagged && reply->error() == QNetworkReply::NoError && timeoutTimer.isActive();
     if (ok)
         data = reply->readAll();
+    else if (flagged)
+        error = QObject::tr("Cancelled.");
     else
         error = reply->error() != QNetworkReply::NoError
                     ? reply->errorString()

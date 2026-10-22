@@ -4,7 +4,7 @@ Context for anyone, human or agent, picking this repository up cold.
 
 ## What this is
 
-Quality of Life Mod Manager 2.x: a Qt 6 / C++17 desktop app that installs, updates,
+Blutac Launcher 2.x: a Qt 6 / C++17 desktop app that installs, updates,
 launches and removes Call of Duty mods on Plutonium, built around the Quality of Life
 series. It is a fork of [Cod Lan Launcher](https://github.com/MestreTM/CLL-Cod-Lan-Launcher)
 v1.2.0 (LGPL-3.0). The 1.x line was a C# WinForms app in this same repository; it was
@@ -19,7 +19,7 @@ release line (2.16.x); this app is 2.0.x. Do not compare the two.
 src/                 app code (upstream layout kept so upstream merges stay possible)
 src/Version.h        version and every brand string, URL and feed address
 src/QolService.*     the series: mod state, packs, controller icons, ReShade install
-src/pages/QolPage.*  the "Quality of Life" sidebar page
+src/pages/QolPage.*  the "Game Configuration" sidebar page
 src/GameLauncher.*   LAN and online launch (both the bootstrapper), ReShade watchdog
 src/PlutoniumAuth.*  Plutonium account: saved token, validate, mint a session token
 src/VersionCompare.h the one rule for "is there an update", shared by both callers

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CancelState.h"
 #include "ModPreview.h"
 
 #include <QString>
@@ -82,5 +83,6 @@ namespace GithubModInstaller
                   const QString &plutoniumRoot,
                   const QString &gameRoot,
                   const ProgressFn &onProgress = nullptr,
-                  QList<FailedDownload> *failedOut = nullptr);
+                  QList<FailedDownload> *failedOut = nullptr,
+                  const CancelHandle &cancel = {});
 }

@@ -32,7 +32,6 @@ set(SOURCES
     src/pages/ServerPage.cpp
     src/SteamDetector.cpp
     src/SetupWizard.cpp
-    src/ProgressDialog.cpp
     src/SmartModInstaller.cpp
     src/CllInstaller.cpp
     src/GithubModInstaller.cpp
@@ -48,6 +47,7 @@ set(SOURCES
     src/SelfUpdate.cpp
     src/QolService.cpp
     src/QolBackups.cpp
+    src/DownloadCenter.cpp
     src/pages/QolPage.cpp
 )
 
@@ -72,7 +72,6 @@ set(HEADERS
     src/pages/ServerPage.h
     src/SteamDetector.h
     src/SetupWizard.h
-    src/ProgressDialog.h
     src/SmartModInstaller.h
     src/CllInstaller.h
     src/GithubModInstaller.h
@@ -87,6 +86,7 @@ set(HEADERS
     src/UpdateService.h
     src/QolService.h
     src/QolBackups.h
+    src/DownloadCenter.h
     src/pages/QolPage.h
 )
 
@@ -122,7 +122,7 @@ if (WIN32)
         message(FATAL_ERROR "CLL_VERSION not found in src/Version.h")
     endif()
     string(REPLACE "." "," APP_VERSION_COMMAS "${APP_VERSION},0")
-    set(APP_NAME "Quality of Life Mod Manager")
+    set(APP_NAME "Blutac Launcher")
     set(APP_AUTHOR "DavidHiFi")
     set(APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/icon.ico")
     if (EXISTS "${APP_ICON}")

@@ -213,10 +213,14 @@ Asset findAsset(const QJsonArray &releases, const QStringList &want, const QStri
 // copied while we are at it. Each kind keeps its OLDEST backup, so after the
 // first install this costs one folder check per kind, not another copy.
 bool backupFirst(const AppSettings &s, const QStringList &required, const QolService::Progress &p,
-                 QString &error)
+                 QString &error, const QolService::Cancelled &cancelled)
 {
     if (!s.backupBeforeInstall)
         return true;
+    if (cancelled && *cancelled) {
+        error = QObject::tr("Cancelled.");
+        return false;
+    }
     auto scaled = [&p](const QString &text, int pct) {
         if (p) p(text, pct < 0 ? -1 : 1 + pct / 25);   // the backup's share of the bar is 1-5%
     };
@@ -253,8 +257,12 @@ QString sha256Of(const QString &path)
 // output, which reads like a fault on their own machine. It was not, and no
 // amount of retrying was ever going to fix it.
 bool downloadAndUnpack(const Asset &a, const QString &tag, const QolService::Progress &p,
-                       QString &unpacked, QString &error)
+                       QString &unpacked, QString &error, const QolService::Cancelled &cancelled)
 {
+    if (cancelled && *cancelled) {
+        error = QObject::tr("Cancelled.");
+        return false;
+    }
     const QString work = tempDir(tag);
     const QString zip = QDir(work).filePath(QStringLiteral("pack.zip"));
     const bool canVerify = !a.sha256.isEmpty() || a.size > 0;
@@ -263,9 +271,10 @@ bool downloadAndUnpack(const Asset &a, const QString &tag, const QolService::Pro
     for (int attempt = 1; attempt <= 2 && !verified; ++attempt) {
         if (p) p(attempt == 1 ? QObject::tr("Downloading...")
                               : QObject::tr("The download was damaged; trying again..."), 5);
+        const auto check = [&cancelled]() { return !cancelled || *cancelled; };
         if (!Downloader::downloadToFile(a.url, zip, error, [&](qint64 got, qint64 total) {
                 if (p) p(QObject::tr("Downloading..."), total > 0 ? int(5 + got * 65 / total) : 10);
-            }, 30 * 60 * 1000))
+            }, 30 * 60 * 1000, check))
             return false;
 
         if (!canVerify)
@@ -293,7 +302,8 @@ bool downloadAndUnpack(const Asset &a, const QString &tag, const QolService::Pro
     if (p) p(QObject::tr("Unpacking..."), 72);
     unpacked = QDir(work).filePath(QStringLiteral("unpacked"));
     QDir().mkpath(unpacked);
-    if (!ArchiveTool::extractToDirectory(zip, unpacked, &error)) {
+    if (!ArchiveTool::extractToDirectory(zip, unpacked, &error, {},
+                                         [&cancelled]() { return cancelled && *cancelled; })) {
         if (verified) {
             error = QObject::tr(
                         "%1 downloaded correctly, but it cannot be unpacked: the pack "
@@ -429,7 +439,8 @@ QString latestModVersion(const SeriesMod &m, QString &error)
     return QJsonDocument::fromJson(raw).object().value(QStringLiteral("tag_name")).toString();
 }
 
-bool installMod(const AppSettings &s, const SeriesMod &m, const Progress &p, QString &error)
+bool installMod(const AppSettings &s, const SeriesMod &m, const Progress &p, QString &error,
+                const Cancelled &cancelled)
 {
     if (!m.released || m.folder.isEmpty()) {
         error = QObject::tr("%1 has no release yet.").arg(m.gameTitle);
@@ -444,7 +455,7 @@ bool installMod(const AppSettings &s, const SeriesMod &m, const Progress &p, QSt
     QolBackups::repairAaSamples(s);
     // The mod install overwrites only our own files, so nothing is required;
     // this is the "installed my mod, everything of theirs got copied" step.
-    if (!backupFirst(s, {}, p, error))
+    if (!backupFirst(s, {}, p, error, cancelled))
         return false;
     if (p) p(QObject::tr("Looking up the latest release..."), 2);
     const QJsonArray rels = githubReleases(m.repo, error);
@@ -456,7 +467,7 @@ bool installMod(const AppSettings &s, const SeriesMod &m, const Progress &p, QSt
         return false;
     }
     QString unpacked;
-    if (!downloadAndUnpack(asset, QStringLiteral("mod"), p, unpacked, error))
+    if (!downloadAndUnpack(asset, QStringLiteral("mod"), p, unpacked, error, cancelled))
         return false;
     const QString src = findModDir(unpacked);
     if (src.isEmpty()) {
@@ -466,6 +477,16 @@ bool installMod(const AppSettings &s, const SeriesMod &m, const Progress &p, QSt
     if (p) p(QObject::tr("Installing %1...").arg(m.folder), 85);
     const QString dest = QDir(modsDir(s, m.gameCode)).filePath(m.folder);
     QDir().mkpath(dest);
+    // From here the install writes over live files. A cancel now would leave
+    // the game folder half-replaced, so the last stretch is locked: the row's
+    // button turns into Finishing.... If the click already landed, it stands.
+    if (cancelled) {
+        cancelled->lock();
+        if (*cancelled) {
+            error = QObject::tr("Cancelled.");
+            return false;
+        }
+    }
     // Copy beside the live files first, then swap, so a failure mid-way
     // leaves the previous install intact.
     QStringList staged;
@@ -512,13 +533,14 @@ bool packInstalled(const AppSettings &s, Pack pack)
     return QFileInfo::exists(manifestPath(s, packKind(pack)));
 }
 
-bool installPack(const AppSettings &s, Pack pack, const Progress &p, QString &error)
+bool installPack(const AppSettings &s, Pack pack, const Progress &p, QString &error,
+                 const Cancelled &cancelled)
 {
     if (const QString g = runningGame(); !g.isEmpty()) {
         error = QObject::tr("Close Plutonium first (%1 is running). The game keeps the mod files open while it runs.").arg(g);
         return false;
     }
-    if (!backupFirst(s, {packKind(pack)}, p, error))
+    if (!backupFirst(s, {packKind(pack)}, p, error, cancelled))
         return false;
     const SeriesMod t6 = seriesFor(QStringLiteral("t6"));
     if (p) p(QObject::tr("Looking up the latest release..."), 2);
@@ -532,9 +554,12 @@ bool installPack(const AppSettings &s, Pack pack, const Progress &p, QString &er
         return false;
     }
     QString unpacked;
-    if (!downloadAndUnpack(asset, packKind(pack), p, unpacked, error))
+    if (!downloadAndUnpack(asset, packKind(pack), p, unpacked, error, cancelled))
         return false;
     const QString src = packRoot(unpacked, packKind(pack));
+    // From here the copy overwrites manifest-owned files; cancel window closes.
+    if (cancelled)
+        cancelled->lock();
     if (p) p(QObject::tr("Copying files..."), 85);
     QStringList written;
     // Controller glyphs are owned by the controller pack; a texture install
@@ -566,7 +591,8 @@ QString installedController(const AppSettings &s)
     return QString::fromUtf8(f.readAll()).trimmed();
 }
 
-bool installController(const AppSettings &s, const QString &pack, const Progress &p, QString &error)
+bool installController(const AppSettings &s, const QString &pack, const Progress &p, QString &error,
+                       const Cancelled &cancelled)
 {
     if (const QString g = runningGame(); !g.isEmpty()) {
         error = QObject::tr("Close Plutonium first (%1 is running). The game keeps the mod files open while it runs.").arg(g);
@@ -575,7 +601,7 @@ bool installController(const AppSettings &s, const QString &pack, const Progress
     const QString folderName = pack == QLatin1String("ps5")    ? QStringLiteral("Dualsense Icons")
                              : pack == QLatin1String("switch") ? QStringLiteral("Nintendo Switch Icons")
                                                                : QStringLiteral("Xbox One Buttons");
-    if (!backupFirst(s, {QStringLiteral("controller")}, p, error))
+    if (!backupFirst(s, {QStringLiteral("controller")}, p, error, cancelled))
         return false;
     // Cached per pack under the state folder so switching packs is offline after the first download.
     const QString cache = QDir(stateDir(s)).filePath(QStringLiteral("controller-packs"));
@@ -599,7 +625,7 @@ bool installController(const AppSettings &s, const QString &pack, const Progress
             return false;
         }
         QString unpacked;
-        if (!downloadAndUnpack(asset, QStringLiteral("controller"), p, unpacked, error))
+        if (!downloadAndUnpack(asset, QStringLiteral("controller"), p, unpacked, error, cancelled))
             return false;
         QDir(cache).removeRecursively();
         QDir().mkpath(QFileInfo(cache).absolutePath());
@@ -631,6 +657,10 @@ bool installController(const AppSettings &s, const QString &pack, const Progress
     }
     if (p) p(QObject::tr("Installing %1...").arg(folderName), 85);
     const QString dest = QDir(t6Storage(s)).filePath(QStringLiteral("images"));
+    // The manifest removal and the copy below replace the player's icons;
+    // past this point a cancel cannot stop half-way.
+    if (cancelled)
+        cancelled->lock();
     QString ignore;
     removeManifest(s, QStringLiteral("controller"), dest, ignore);
     QStringList written;
@@ -1363,7 +1393,7 @@ bool applyReShadeMode(const AppSettings &s, ReShadeMode mode, bool dlss, QString
 
     if (lan && dlss && !withDlss) {
         error = QObject::tr("The add-on build of ReShade is in place, but the DLSS 5 payload "
-                            "has not been imported yet - see the Quality of Life page.");
+                            "has not been imported yet - see the Game Configuration page.");
         return false;   // the add-on build is installed; only DLSS is missing
     }
     return true;

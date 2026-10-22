@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "DownloadCenter.h"
 #include "LoginDialog.h"
 #include "PlutoniumAuth.h"
 #include "AnimatedLogo.h"
@@ -154,6 +155,11 @@ MainWindow::MainWindow(QWidget *parent)
     rl->setSpacing(0);
     rl->addWidget(buildHeader());
     rl->addWidget(m_stack, 1);
+    // The download panel lives under every page, so a job that started on
+    // one page can be watched and cancelled from any other.
+    DownloadCenter *dc = DownloadCenter::instance();
+    dc->setParent(this);
+    rl->addWidget(dc);
 
     outer->addWidget(right, 1);
     setCentralWidget(central);
@@ -294,11 +300,12 @@ void MainWindow::retranslate()
     if (m_saveBtn)
         m_saveBtn->setText(tr("Salvar"));
     const QStringList tools = {
-        tr("Quality of Life"), tr("Mods"), tr("Servidor LAN (beta)"), tr("Configuracoes"), tr("Sobre")
+        tr("Game Configuration"), tr("Mods"), tr("Servidor LAN (beta)"), tr("Configuracoes"), tr("Sobre")
     };
     for (int i = 0; i < m_toolButtons.size() && i < tools.size(); ++i)
         m_toolButtons[i]->setText("  " + tools[i]);
     if (m_qolPage) m_qolPage->retranslate();
+    DownloadCenter::instance()->retranslate();
     applyHeader(m_toolIndex);
     if (m_homeNavBtn) m_homeNavBtn->setText("  " + tr("Início"));
     if (m_editGamesBtn) m_editGamesBtn->setToolTip(tr("Reorganizar jogos"));
@@ -455,7 +462,7 @@ QWidget *MainWindow::buildSidebar()
 
     struct Tool { QString text; QString icon; };
     const QList<Tool> tools = {
-        {tr("Quality of Life"), ":/icons/qol.svg"},
+        {tr("Game Configuration"), ":/icons/qol.svg"},
         {tr("Mods"), ":/icons/mods.svg"},
         {tr("Servidor LAN (beta)"), ":/icons/server.svg"},
         {tr("Configuracoes"), ":/icons/misc.svg"},
@@ -549,7 +556,7 @@ void MainWindow::applyHeader(int toolIndex)
         info = {tr("Início"), tr("Descubra mods e mapas por jogo."), false};
         break;
     case ToolQol:
-        info = {tr("Quality of Life"), tr("The series: install, update and remove each game's mod and its extras."), false};
+        info = {tr("Game Configuration"), tr("The series: install, update and remove each game's mod and its extras."), false};
         break;
     case ToolMods:
         info = {tr("Mods"), tr("Instale pacotes e mapas customizados por jogo."), false};

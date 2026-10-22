@@ -376,16 +376,33 @@ qint64 startReShadeWatchdog(const QString &plutoniumRoot, QString &error)
         return 0;
     const QString ps = QDir(qEnvironmentVariable("SystemRoot", QStringLiteral("C:\\Windows")))
                            .filePath(QStringLiteral("System32/WindowsPowerShell/v1.0/powershell.exe"));
-    qint64 pid = 0;
-    const QStringList args{QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
+    // QProcess::startDetached has no way to keep the console window off
+    // screen, and one that blinks beside the game on every launch is noise.
+    // CreateProcessW with CREATE_NO_WINDOW starts the same helper, invisible.
+    const QStringList args{QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"),
+                           QStringLiteral("Bypass"),
                            QStringLiteral("-File"), QDir::toNativeSeparators(script),
                            QStringLiteral("-PlutoRoot"), QDir::toNativeSeparators(plutoniumRoot)};
-    if (!QProcess::startDetached(ps, args, plutoniumRoot, &pid)) {
+    QStringList quoted{QDir::toNativeSeparators(ps)};
+    quoted.append(args);
+    QString cmdline;
+    for (const QString &piece : quoted)
+        cmdline += QStringLiteral(" \"%1\"").arg(piece);
+    cmdline.remove(0, 1);
+    std::wstring wcmd = cmdline.toStdWString();
+    const std::wstring cwd = QDir::toNativeSeparators(plutoniumRoot).toStdWString();
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    if (!CreateProcessW(nullptr, wcmd.data(), nullptr, nullptr, FALSE,
+                        CREATE_NO_WINDOW, nullptr, cwd.c_str(), &si, &pi)) {
         error = QObject::tr("Could not start PowerShell for the ReShade watchdog.");
         return 0;
     }
-    g_watchdogPid = pid;
-    return pid;
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    g_watchdogPid = pi.dwProcessId;
+    return pi.dwProcessId;
 #endif
 }
 

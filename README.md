@@ -1,12 +1,15 @@
 <div align="center">
 
-<img src="https://socialify.git.ci/DavidHiFi/QualityOfLifeModManager/image?description=1&font=Inter&language=1&name=1&owner=1&pattern=Plus&theme=Dark" alt="Quality of Life Mod Manager project card" width="100%">
+<img src="https://socialify.git.ci/DavidHiFi/QualityOfLifeModManager/image?description=1&font=Inter&language=1&name=1&owner=1&pattern=Plus&theme=Dark" alt="Blutac Launcher project card" width="100%">
 
-# Quality of Life Mod Manager
+# Blutac Launcher
 
 **Install, update, launch and remove Call of Duty mods on [Plutonium](https://plutonium.pw).**
 
 One window for the [Quality of Life series](https://github.com/DavidHiFi/Plutonium-QoL-Series), every other mod in your Plutonium folders, LAN and online play, ReShade and a LAN server.
+
+> [!NOTE]
+> Previously released as *Quality of Life Mod Manager*. The repo stays `QualityOfLifeModManager` (so does the exe name) because installed copies self-update from it.
 
 <a href="https://github.com/DavidHiFi/QualityOfLifeModManager/releases/latest">
 <img src="https://img.shields.io/badge/%E2%AC%87%EF%B8%8F%20DOWNLOAD%20LATEST%20RELEASE-2EA043?style=for-the-badge&labelColor=161B22" alt="Download the latest release" height="42">
@@ -26,7 +29,7 @@ One window for the [Quality of Life series](https://github.com/DavidHiFi/Plutoni
 
 1. Download **`QualityOfLifeModManagerSetup.exe`** from the [latest release](https://github.com/DavidHiFi/QualityOfLifeModManager/releases/latest) and run it. It installs for your user only, with no admin rights, and adds Start menu and desktop shortcuts.
 2. Run the app. The first-run wizard asks for your name, a theme, your Plutonium folder and your game folders.
-3. Open **Quality of Life** in the sidebar and press **Install** on Black Ops II.
+3. Open **Game Configuration** in the sidebar and press **Install** on Black Ops II.
 4. Open **Black Ops II**, pick **LAN** or **Online**, and press **Start**.
 
 Prefer no installer? Unzip **`QualityOfLifeModManager-portable.zip`** anywhere you can write to and run the exe inside it. The `.update.bin` file on the release page is for the app's own updater, not an installer.
@@ -38,7 +41,7 @@ Prefer no installer? Unzip **`QualityOfLifeModManager-portable.zip`** anywhere y
 - **One-click mods:** install, update or remove each game's Quality of Life mod.
 - **Black Ops II extras:** HD texture pack, custom sounds and PlayStation 5, Switch or Xbox button prompts.
 - **Backups:** every install first copies your own textures, sounds, icons, ReShade setup, scripts and settings.
-- **Put it back:** restore any backup from the Quality of Life page, or remove a pack and get your originals back.
+- **Put it back:** restore any backup from the Game Configuration page, or remove a pack and get your originals back.
 
 ### Playing
 
@@ -78,7 +81,7 @@ Prefer no installer? Unzip **`QualityOfLifeModManager-portable.zip`** anywhere y
 > **Only the Black Ops II mod is out so far.** The World at War, Black Ops and Black Ops III mods in the series are planned.
 
 > [!IMPORTANT]
-> **Plutonium deletes ReShade every time it starts.** Tick **ReShade** on the Play page and the app's watchdog puts the files back as the game opens, then saves your in-game preset edits.
+> **Plutonium deletes ReShade every time it starts.** Tick **ReShade** on the Play page, install it once, and a quiet watcher puts the files back as the game opens, then saves your in-game preset edits.
 
 > [!NOTE]
 > **Mods load on LAN only.** Online games start without a mod. Pick one from the game's own Mods menu once you are in.
@@ -114,6 +117,8 @@ The version lives in `src/Version.h`. [AGENTS.md](AGENTS.md) explains the parts 
 - `qol_update.json` is the update feed. Regenerate it after each release with `python scripts\gen_update.py -o qol_update.json`, then check it with `python scripts\gen_update.py --verify qol_update.json`. Never edit it by hand.
 
 </details>
+
+---
 
 ## Contributing
 
