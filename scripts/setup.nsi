@@ -167,6 +167,13 @@ Section "Install"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "NoRepair" 1
 
+  ; Installs from before the rename left shortcuts under the old name. Remove
+  ; them, so an upgrade does not leave two copies of the app in the menus.
+  Delete "$SMPROGRAMS\Quality of Life Mod Manager\Quality of Life Mod Manager.lnk"
+  Delete "$SMPROGRAMS\Quality of Life Mod Manager\Uninstall.lnk"
+  RMDir "$SMPROGRAMS\Quality of Life Mod Manager"
+  Delete "$DESKTOP\Quality of Life Mod Manager.lnk"
+
   CreateDirectory "$SMPROGRAMS\Blutac Launcher"
   CreateShortCut "$SMPROGRAMS\Blutac Launcher\Blutac Launcher.lnk" "$INSTDIR\QualityOfLifeModManager.exe" "" "$INSTDIR\QualityOfLifeModManager.exe" 0
   CreateShortCut "$SMPROGRAMS\Blutac Launcher\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
