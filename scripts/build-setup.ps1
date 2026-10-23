@@ -8,7 +8,7 @@
 param(
     [string] $NsisDir = $env:NSISDIR,
     [string] $OutDir = '',
-    [string] $ObjDump = 'H:\Qt\Tools\mingw1310_64\bin\objdump.exe'
+    [string] $ObjDump = 'G:\From H-Drive\Qt\Tools\mingw1310_64\bin\objdump.exe'
 )
 $ErrorActionPreference = 'Stop'
 
