@@ -56,6 +56,8 @@ Prefer no installer? Unzip the **portable** `.zip` anywhere you can write to and
 - **Online:** signs in with your Plutonium account and starts the game without opening Plutonium's launcher.
 - **ReShade:** colour grading for every Plutonium game, kept in place while you play.
 - **DLSS 5:** an optional switch for Black Ops II LAN games, once you import it from a folder that already has it.
+- **Black Ops III client:** pick the LAN Launcher client or the BOIII Community client, with your own launch options for each.
+- **T7 Patch:** install, update or remove the Black Ops III security patch, and set its player name, network password and friends-only switch. It can also install the Mod Check Bypass plugin from its zip.
 
 ### Mods and servers
 
@@ -86,7 +88,7 @@ Prefer no installer? Unzip the **portable** `.zip` anywhere you can write to and
 ## Notes
 
 > [!NOTE]
-> **The Workshop, scripts, accent colour, window materials and title bar switch are new in the next release.** Version 2.3.0 has the older Home page. Build from source to try them now.
+> **The Workshop, scripts, T7 Patch, accent colour, window materials and title bar switch are new in the next release.** Version 2.3.0 has the older Home page. Build from source to try them now.
 
 > [!IMPORTANT]
 > **Plutonium deletes ReShade every time it starts.** Tick **ReShade** on the Play page, install it once, and a quiet watcher puts the files back as the game opens, then saves your in-game preset edits.
@@ -179,6 +181,8 @@ Thanks to everyone using the launcher, reporting catalog bugs and sending fixes.
 | **xerxes-at** ([T4](https://github.com/xerxes-at/T4ServerConfigs), [T5](https://github.com/xerxes-at/T5ServerConfig) and [T6](https://github.com/xerxes-at/T6ServerConfigs) server configs) | The dedicated server configs the LAN server page downloads. |
 | **AlterWare** ([alterware.dev](https://alterware.dev)) | Some of the standalone client sources. |
 | **BOIII Community** ([BOIII-Community](https://gitlab.com/boiii-community/BOIII-Community)) | The alternative Black Ops III client. |
+| **shiversoftdev** and **Scroptss** ([T7Patch](https://github.com/Scroptss/T7Patch)) | T7 Patch, which the Black Ops III client window downloads from its releases and installs. |
+| **InsaneCallum** ([BO3 Mod Check Bypass](https://github.com/Callum-Bell/BO3-Mod-Check-Patch)) | The plugin the T7 Patch tab installs from the zip you download. |
 | **Plutonium** ([loading mods](https://plutonium.pw/docs/modding/loading-mods/)) | The script folder layout the Workshop installs into. |
 | **crosire** ([ReShade](https://reshade.me)) | ReShade, bundled unmodified for the colour grading. |
 | **Catppuccin** ([catppuccin](https://github.com/catppuccin/catppuccin)) | The four Catppuccin colour palettes. |

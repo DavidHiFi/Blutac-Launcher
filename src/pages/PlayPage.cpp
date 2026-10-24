@@ -8,8 +8,13 @@
 #include "../Checkables.h"
 #include "GameLauncher.h"
 #include "QolService.h"
+#include "T7Patch.h"
 #include "Version.h"
 #include <QCheckBox>
+#include <QDesktopServices>
+#include <QFileDialog>
+#include <QFormLayout>
+#include <QUrl>
 
 #include <QPainter>
 #include <QLinearGradient>
@@ -530,6 +535,7 @@ void PlayPage::openClientPicker()
 
     tabs->addTab(clientsPage, tr("Clients"));
     tabs->addTab(argsPage, tr("Arguments"));
+    tabs->addTab(t7PatchTab(&dlg, gameDir), tr("T7 Patch"));
     root->addWidget(tabs, 1);
 
     auto pick = [&](const QString &id) {
@@ -588,6 +594,154 @@ void PlayPage::openClientPicker()
     if (picked.isEmpty())
         return;
     installBo3Client(picked, true, false);
+}
+
+// T7 Patch: install, update and remove it, edit t7patch.conf, and add or take
+// out the Mod Check Bypass plugin from a zip the player downloaded.
+QWidget *PlayPage::t7PatchTab(QWidget *parent, const QString &gameDir)
+{
+    auto *page = new QWidget(parent);
+    auto *lay = new QVBoxLayout(page);
+    lay->setContentsMargins(8, 12, 8, 8);
+    lay->setSpacing(10);
+
+    auto *intro = new QLabel(tr("Security fixes for online play in the Steam game, by shiversoftdev, "
+                                "kept up to date by Scroptss. Steam loads it with the game."), page);
+    intro->setObjectName("CardDesc");
+    intro->setWordWrap(true);
+    lay->addWidget(intro);
+
+    auto *statusRow = new QHBoxLayout();
+    auto *status = new QLabel(page);
+    status->setObjectName("CardTitle");
+    auto *installBtn = new QPushButton(page);
+    installBtn->setProperty("cssClass", "primary");
+    auto *removeBtn = new QPushButton(tr("Remove"), page);
+    removeBtn->setProperty("cssClass", "danger");
+    statusRow->addWidget(status, 1);
+    statusRow->addWidget(installBtn);
+    statusRow->addWidget(removeBtn);
+    lay->addLayout(statusRow);
+
+    auto *form = new QFormLayout();
+    form->setSpacing(8);
+    auto *name = new QLineEdit(page);
+    auto *password = new QLineEdit(page);
+    password->setPlaceholderText(tr("Empty for normal matchmaking"));
+    auto *friends = new Ui::CheckBox(tr("Friends only"), page);
+    form->addRow(tr("Player name"), name);
+    form->addRow(tr("Network password"), password);
+    form->addRow(QString(), friends);
+    lay->addLayout(form);
+    auto *configRow = new QHBoxLayout();
+    auto *configHint = new QLabel(tr("Everyone you play with needs the same network password. "
+                                     "Changes apply while the game runs."), page);
+    configHint->setObjectName("MutedHint");
+    configHint->setWordWrap(true);
+    auto *saveBtn = new QPushButton(tr("Save settings"), page);
+    configRow->addWidget(configHint, 1);
+    configRow->addWidget(saveBtn);
+    lay->addLayout(configRow);
+
+    auto *plugTitle = new QLabel(tr("Mod Check Bypass plugin"), page);
+    plugTitle->setObjectName("CardTitle");
+    auto *plugDesc = new QLabel(tr("By InsaneCallum. Lets you earn XP and rank up with mods loaded. "
+                                   "Its download page shows ads, so download BO3-Modded-Rankup-Plugin.zip "
+                                   "yourself, then pick it here."), page);
+    plugDesc->setObjectName("CardDesc");
+    plugDesc->setWordWrap(true);
+    auto *plugStatus = new QLabel(page);
+    plugStatus->setObjectName("MutedHint");
+    auto *plugRow = new QHBoxLayout();
+    auto *plugPage = new QPushButton(tr("Open the plugin page"), page);
+    auto *plugInstall = new QPushButton(tr("Install from zip..."), page);
+    auto *plugRemove = new QPushButton(tr("Remove plugin"), page);
+    plugRow->addWidget(plugStatus, 1);
+    plugRow->addWidget(plugPage);
+    plugRow->addWidget(plugInstall);
+    plugRow->addWidget(plugRemove);
+    lay->addSpacing(6);
+    lay->addWidget(plugTitle);
+    lay->addWidget(plugDesc);
+    lay->addLayout(plugRow);
+    lay->addStretch();
+
+    const QPointer<QWidget> guard(page);
+    const auto refresh = std::make_shared<std::function<void()>>([=]() {
+        if (!guard)
+            return;
+        const QString v = T7Patch::installedVersion(gameDir);
+        const bool ours = !v.isEmpty() && v != QLatin1String("manual");
+        status->setText(v.isEmpty() ? tr("Not installed")
+                        : ours      ? tr("Installed: %1").arg(v)
+                                    : tr("Installed outside Blutac"));
+        installBtn->setText(v.isEmpty() ? tr("Install") : tr("Update"));
+        removeBtn->setEnabled(ours);
+        const T7Patch::Config c = T7Patch::readConfig(gameDir);
+        name->setText(c.playerName);
+        password->setText(c.networkPassword);
+        friends->setChecked(c.friendsOnly);
+        for (QWidget *w : {static_cast<QWidget *>(name), static_cast<QWidget *>(password),
+                           static_cast<QWidget *>(friends), static_cast<QWidget *>(saveBtn)})
+            w->setEnabled(!v.isEmpty());
+        const bool plug = T7Patch::pluginInstalled(gameDir);
+        plugStatus->setText(plug ? tr("Plugin installed.") : tr("Plugin not installed."));
+        plugInstall->setEnabled(ours);
+        plugRemove->setEnabled(plug);
+    });
+    (*refresh)();
+
+    connect(installBtn, &QPushButton::clicked, page, [this, gameDir, refresh]() {
+        DownloadCenter::run(this, tr("Installing T7 Patch"),
+            [gameDir](QString &error, const DownloadCenter::Progress &report, const CancelHandle &canc) {
+                return T7Patch::install(gameDir, report, error, [canc]() { return canc && (*canc)(); });
+            },
+            [this, refresh](bool ok, const QString &error) {
+                (*refresh)();
+                if (!ok && error != tr("Cancelled."))
+                    QMessageBox::warning(this, tr("T7 Patch"),
+                                         error.isEmpty() ? tr("T7 Patch did not install.") : error);
+            });
+    });
+    connect(removeBtn, &QPushButton::clicked, page, [page, gameDir, refresh]() {
+        if (QMessageBox::question(page, tr("T7 Patch"),
+                                  tr("Remove T7 Patch and its settings from the game folder?"))
+            != QMessageBox::Yes)
+            return;
+        QString error;
+        if (!T7Patch::remove(gameDir, error))
+            QMessageBox::warning(page, tr("T7 Patch"), error);
+        (*refresh)();
+    });
+    connect(saveBtn, &QPushButton::clicked, page, [page, gameDir, name, password, friends]() {
+        T7Patch::Config c;
+        c.playerName = name->text();
+        c.networkPassword = password->text();
+        c.friendsOnly = friends->isChecked();
+        QString error;
+        if (!T7Patch::writeConfig(gameDir, c, error))
+            QMessageBox::warning(page, tr("T7 Patch"), error);
+    });
+    connect(plugPage, &QPushButton::clicked, page, []() {
+        QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/Callum-Bell/BO3-Mod-Check-Patch")));
+    });
+    connect(plugInstall, &QPushButton::clicked, page, [page, gameDir, refresh]() {
+        const QString zip = QFileDialog::getOpenFileName(page, tr("Pick the plugin zip"), QString(),
+                                                         tr("Zip files (*.zip)"));
+        if (zip.isEmpty())
+            return;
+        QString error;
+        if (!T7Patch::installPlugin(gameDir, zip, error))
+            QMessageBox::warning(page, tr("Mod Check Bypass plugin"), error);
+        (*refresh)();
+    });
+    connect(plugRemove, &QPushButton::clicked, page, [page, gameDir, refresh]() {
+        QString error;
+        if (!T7Patch::removePlugin(gameDir, error))
+            QMessageBox::warning(page, tr("Mod Check Bypass plugin"), error);
+        (*refresh)();
+    });
+    return page;
 }
 
 void PlayPage::installBo3Client(const QString &kind, bool notifyWhenDone, bool launchWhenReady)

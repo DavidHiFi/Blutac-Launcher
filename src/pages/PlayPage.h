@@ -36,6 +36,7 @@ private:
     void updateClientButton();
     void openClientPicker();
     void installBo3Client(const QString &kind, bool notifyWhenDone, bool launchWhenReady);
+    QWidget *t7PatchTab(QWidget *parent, const QString &gameDir);
     void installS1Client(bool notifyWhenDone, bool launchWhenReady);
     void installReShadeOnTick();
 public:

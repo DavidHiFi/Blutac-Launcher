@@ -51,6 +51,7 @@ set(SOURCES
     src/DownloadCenter.cpp
     src/pages/QolPage.cpp
     src/ScriptStore.cpp
+    src/T7Patch.cpp
 )
 
 set(HEADERS
@@ -68,6 +69,7 @@ set(HEADERS
     src/Theme.h
     src/WindowChrome.h
     src/ScriptStore.h
+    src/T7Patch.h
     src/I18n.h
     src/ImportKitDialog.h
     src/MakeConfigDialog.h

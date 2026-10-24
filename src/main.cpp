@@ -10,6 +10,7 @@
 #include "PlutoniumAuth.h"
 #include "HomeCatalog.h"
 #include "ScriptStore.h"
+#include "T7Patch.h"
 #include "VersionCompare.h"
 
 #include <QAbstractButton>
@@ -26,6 +27,7 @@
 #include <QFileInfo>
 #include <QLibrary>
 #include <QMap>
+#include <QProcess>
 #include <QOperatingSystemVersion>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -641,6 +643,85 @@ int main(int argc, char *argv[])
                       QStringLiteral("%1 of %2").arg(listed).arg(it.value()));
             }
             QDir(root).removeRecursively();
+        }
+
+        // T7 Patch on a scratch game folder: the real download, settings, the
+        // plugin going in and out, and Remove putting back the player's own
+        // dsound.dll.
+        {
+            const QString dir = QDir(QDir::tempPath()).filePath(QStringLiteral("qol-selftest-t7patch"));
+            QDir(dir).removeRecursively();
+            QDir().mkpath(dir);
+            auto writeFile = [](const QString &path, const QByteArray &bytes) {
+                QFile f(path);
+                return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size();
+            };
+            auto readFile = [](const QString &path) {
+                QFile f(path);
+                return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+            };
+            const auto at = [&dir](const char *name) { return QDir(dir).filePath(QString::fromLatin1(name)); };
+            writeFile(at("BlackOps3.exe"), QByteArray());
+            writeFile(at("dsound.dll"), QByteArrayLiteral("players-own"));
+
+            QString terr;
+            const bool installed = T7Patch::install(dir, {}, terr);
+            check("t7patch: install", installed, installed ? T7Patch::installedVersion(dir) : terr);
+            if (installed) {
+                check("t7patch: files in place",
+                      QFileInfo::exists(at("t7patch.dll")) && QFileInfo::exists(at("t7patchloader.dll"))
+                          && QFileInfo::exists(at("t7patch.conf")) && readFile(at("dsound.dll")) != "players-own");
+                check("t7patch: player's dsound.dll kept aside",
+                      readFile(at("dsound.dll.blutac-backup")) == "players-own");
+                const QByteArray t7dsound = readFile(at("dsound.dll"));
+
+                T7Patch::Config c;
+                c.playerName = QStringLiteral("Selftest Name");
+                c.networkPassword = QStringLiteral("pw\nwith newline");
+                c.friendsOnly = false;
+                check("t7patch: settings write", T7Patch::writeConfig(dir, c, terr), terr);
+                const T7Patch::Config back = T7Patch::readConfig(dir);
+                check("t7patch: settings read back",
+                      back.playerName == c.playerName && back.networkPassword == QStringLiteral("pwwith newline")
+                          && !back.friendsOnly,
+                      back.playerName + QLatin1Char('|') + back.networkPassword);
+
+                // A stand-in plugin zip: an .asi plus its own loader dll.
+                const QString plugSrc = QDir(dir).filePath(QStringLiteral("plugsrc"));
+                QDir().mkpath(plugSrc);
+                writeFile(QDir(plugSrc).filePath(QStringLiteral("modcheck.asi")), QByteArrayLiteral("asi"));
+                writeFile(QDir(plugSrc).filePath(QStringLiteral("winmm.dll")), QByteArrayLiteral("loader"));
+                const QString plugZip = QDir(dir).filePath(QStringLiteral("plugin.zip"));
+                ArchiveTool::ensureBundledSevenZip();
+                QProcess zip;
+                zip.setWorkingDirectory(plugSrc);
+                zip.start(ArchiveTool::findSevenZip(),
+                          {QStringLiteral("a"), QStringLiteral("-tzip"), plugZip, QStringLiteral("*")});
+                zip.waitForFinished(30000);
+                const bool plugIn = T7Patch::installPlugin(dir, plugZip, terr);
+                check("t7patch: plugin install", plugIn, terr);
+                check("t7patch: plugin layout",
+                      QFileInfo::exists(at("modcheck.asi")) && QFileInfo::exists(at("winmm.dll"))
+                          && QFileInfo::exists(at("t7patchloader.asi")) && !QFileInfo::exists(at("t7patchloader.dll"))
+                          && !QFileInfo::exists(at("dsound.dll")) && T7Patch::pluginInstalled(dir));
+                const bool plugOut = T7Patch::removePlugin(dir, terr);
+                check("t7patch: plugin remove", plugOut, terr);
+                check("t7patch: patch back to its own loader",
+                      !QFileInfo::exists(at("modcheck.asi")) && !QFileInfo::exists(at("winmm.dll"))
+                          && QFileInfo::exists(at("t7patchloader.dll")) && readFile(at("dsound.dll")) == t7dsound
+                          && !T7Patch::pluginInstalled(dir));
+
+                check("t7patch: update keeps settings",
+                      T7Patch::install(dir, {}, terr) && T7Patch::readConfig(dir).playerName == c.playerName, terr);
+                const bool removed = T7Patch::remove(dir, terr);
+                check("t7patch: remove", removed, terr);
+                check("t7patch: folder as it was",
+                      !QFileInfo::exists(at("t7patch.dll")) && !QFileInfo::exists(at("t7patchloader.dll"))
+                          && !QFileInfo::exists(at("t7patch.conf")) && !QFileInfo::exists(at("blutac-t7patch.json"))
+                          && readFile(at("dsound.dll")) == "players-own"
+                          && T7Patch::installedVersion(dir).isEmpty());
+            }
+            QDir(dir).removeRecursively();
         }
 
         // The live feed, as served. This is the check that would have caught
