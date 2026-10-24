@@ -365,17 +365,14 @@ CaptionButtons::CaptionButtons(QWidget *window, QWidget *parent)
     lay->setContentsMargins(0, 0, 0, 0);
     lay->setSpacing(0);
 
-    QFont glyphs;
-    glyphs.setFamilies({QStringLiteral("Segoe Fluent Icons"), QStringLiteral("Segoe MDL2 Assets")});
-    glyphs.setPixelSize(10);
-
+    // The glyph font comes from base.qss (QPushButton#CaptionButton).
     auto make = [&](QChar glyph, const char *name, const QString &tip) {
         auto *b = new QPushButton(QString(glyph), this);
         b->setObjectName(QLatin1String(name));
-        b->setFont(glyphs);
         b->setFixedSize(46, kCaptionHeight);
         b->setFocusPolicy(Qt::NoFocus);
         b->setToolTip(tip);
+        b->setAccessibleName(tip);
         lay->addWidget(b);
         return b;
     };

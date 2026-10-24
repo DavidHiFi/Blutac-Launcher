@@ -184,6 +184,7 @@ PlayPage::PlayPage(AppSettings &settings, QWidget *parent)
     m_clientBtn->setIcon(Theme::icon(QStringLiteral(":/icons/misc.svg")));
     m_clientBtn->setProperty("iconPath", ":/icons/misc.svg");
     m_clientBtn->setIconSize(QSize(20, 20));
+    m_clientBtn->setAccessibleName(tr("Game client"));
     m_clientBtn->hide();
     connect(m_clientBtn, &QPushButton::clicked, this, &PlayPage::openClientPicker);
     row->addWidget(m_clientBtn, 0, Qt::AlignVCenter);

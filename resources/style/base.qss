@@ -625,6 +625,9 @@ QPushButton#CaptionButton, QPushButton#CaptionClose {
     border-radius: 0;
     padding: 0;
     color: @TEXT@;
+    /* Set here, not with setFont: the QWidget font rule above would win. */
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets";
+    font-size: 10px;
 }
 QPushButton#CaptionButton:hover, QPushButton#CaptionButton[hot="true"] { background-color: @CAPTION_HOVER@; border: none; }
 QPushButton#CaptionButton:pressed, QPushButton#CaptionButton[down="true"] { background-color: @CAPTION_PRESS@; }
