@@ -10,7 +10,11 @@ Thanks for helping. Bug reports, ideas and pull requests are all welcome.
 - your Windows version, the app version (shown on the About page) and the game and mod involved
 - a screenshot of any error box, and whether you played LAN or Online
 
-A broken entry in the Home catalog or the update feed is a bug too. Name the mod and what it shows.
+A broken entry in the Workshop catalog or the update feed is a bug too. Name the mod or script and what it shows.
+
+## Sharing a script
+
+Press **Share a script** in the Workshop, or open the [share a script form](https://github.com/DavidHiFi/Blutac-Launcher/issues/new?template=share-a-script.yml). Say which game and mode it is for, and which mod it needs, if any. Only share code you wrote or have permission to share, and run it in game once first.
 
 ## Suggesting a feature
 
