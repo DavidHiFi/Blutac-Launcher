@@ -1,29 +1,37 @@
-# Installs or removes Quality of Life Mod Manager for the current user.
+# Installs or removes Blutac Launcher for the current user.
 #   powershell -ExecutionPolicy Bypass -File install.ps1            # from a dist\ or unzipped portable folder
 #   powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
-# Puts the app in %LOCALAPPDATA%\Programs\Quality of Life Mod Manager, adds a Start menu
+# Puts the app in %LOCALAPPDATA%\Programs\Blutac Launcher, adds a Start menu
 # group, a desktop shortcut and an Apps & features entry. Settings (QualityOfLife.ini)
-# stay in the install folder and survive a reinstall.
+# stay in the install folder and survive a reinstall. An existing install, from
+# Setup or from this script, is updated where it is, so its settings come along.
 param([switch] $Uninstall, [string] $Source = $PSScriptRoot)
 $ErrorActionPreference = 'Stop'
 
-$Name    = 'Quality of Life Mod Manager'
+$Name    = 'Blutac Launcher'
+$OldName = 'Quality of Life Mod Manager'
 $Exe     = 'QualityOfLifeModManager.exe'
-$Dest    = Join-Path $env:LOCALAPPDATA "Programs\$Name"
-$Start   = Join-Path ([Environment]::GetFolderPath('StartMenu')) "Programs\$Name"
-$Desktop = [Environment]::GetFolderPath('Desktop')
 $RegKey  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager"
+$Dest    = Join-Path $env:LOCALAPPDATA "Programs\$Name"
+$known   = (Get-ItemProperty $RegKey -ErrorAction SilentlyContinue).InstallLocation
+if ($known -and (Test-Path -LiteralPath $known -PathType Container)) { $Dest = $known }
+$Programs = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs'
+$Start   = Join-Path $Programs $Name
+$Desktop = [Environment]::GetFolderPath('Desktop')
 $ws      = New-Object -ComObject WScript.Shell
 
 function Remove-Shortcuts {
-    if (Test-Path $Start) { Remove-Item $Start -Recurse -Force }
-    Remove-Item (Join-Path $Desktop "$Name.lnk") -Force -ErrorAction SilentlyContinue
-    Remove-Item $RegKey -Recurse -Force -ErrorAction SilentlyContinue
+    foreach ($n in @($Name, $OldName)) {
+        $group = Join-Path $Programs $n
+        if (Test-Path $group) { Remove-Item $group -Recurse -Force }
+        Remove-Item (Join-Path $Desktop "$n.lnk") -Force -ErrorAction SilentlyContinue
+    }
 }
 
 if ($Uninstall) {
     Get-Process -Name ($Exe -replace '\.exe$','') -ErrorAction SilentlyContinue | Stop-Process -Force
     Remove-Shortcuts
+    Remove-Item $RegKey -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path $Dest) {
         # Keep the user's settings so a later reinstall picks them up.
         Get-ChildItem $Dest -Exclude 'QualityOfLife.ini' | Remove-Item -Recurse -Force
@@ -47,6 +55,8 @@ $target = Join-Path $Dest $Exe
 $ver = (Get-Item $target).VersionInfo.FileVersion
 if (-not $ver) { $ver = '2.0.0' }
 
+# Clears shortcuts left under the old name, so the menus show one copy.
+Remove-Shortcuts
 New-Item -ItemType Directory -Force -Path $Start | Out-Null
 foreach ($lnkPath in @((Join-Path $Start "$Name.lnk"), (Join-Path $Desktop "$Name.lnk"))) {
     $lnk = $ws.CreateShortcut($lnkPath)
