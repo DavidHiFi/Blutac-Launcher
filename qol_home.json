@@ -2,8 +2,13 @@
   "schema": 1,
   "updated": "2026-09-19",
   "title": "Blutac Launcher",
-  "note": "Home feed. A copy ships inside the exe; the app refreshes from this file on GitHub, so mods can be added here without a release.",
+  "note": "Workshop feed. A copy ships inside the exe; the app refreshes from this file on GitHub, so mods and scripts can be added here without a release.",
   "featured": [
+    "t6-quality-of-life",
+    "t6-zombies-declassified",
+    "t6-octagonal-ascension"
+  ],
+  "hubs": [
     "t6-quality-of-life",
     "t6-zombies-declassified",
     "t6-octagonal-ascension"
@@ -62,7 +67,8 @@
       "tags": [
         "Zombies",
         "Quality of life"
-      ]
+      ],
+      "folder": "zm_qol"
     },
     {
       "id": "t6-octagonal-ascension",
@@ -79,7 +85,8 @@
       "tags": [
         "Zombies",
         "Custom map"
-      ]
+      ],
+      "folder": "zm_octagonal"
     },
     {
       "id": "t6-zombies-declassified",
@@ -97,7 +104,145 @@
         "Zombies",
         "DLC5",
         "Large"
-      ]
+      ],
+      "folder": "dlc5"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "t4-mp-health-display",
+      "name": "Health display",
+      "game": "t4",
+      "mode": "mp",
+      "author": "Blutac Launcher",
+      "version": "1.0",
+      "summary": "Shows your current health as a number on the left side of the screen.",
+      "description": "Adds a small \"Health\" readout on the left edge of the screen that updates ten times a second. It works with any map and turns off when you remove the script.",
+      "tags": [
+        "Multiplayer",
+        "HUD"
+      ],
+      "file": "workshop/scripts/t4/mp/health_display.gsc"
+    },
+    {
+      "id": "t4-zm-health-display",
+      "name": "Health display",
+      "game": "t4",
+      "mode": "zm",
+      "author": "Blutac Launcher",
+      "version": "1.0",
+      "summary": "Shows your current health as a number on the left side of the screen.",
+      "description": "Adds a small \"Health\" readout on the left edge of the screen that updates ten times a second. It works with any map and turns off when you remove the script.",
+      "tags": [
+        "Zombies",
+        "HUD"
+      ],
+      "file": "workshop/scripts/t4/zm/health_display.gsc"
+    },
+    {
+      "id": "t4-zm-zombie-counter",
+      "name": "Zombie counter",
+      "game": "t4",
+      "mode": "zm",
+      "author": "Blutac Launcher",
+      "version": "1.0",
+      "summary": "Shows how many zombies are left in the round.",
+      "description": "Adds a \"Zombies left\" readout under the left edge of the screen. It counts the zombies that are alive plus the ones still waiting to spawn, so it reaches zero when the round ends.",
+      "tags": [
+        "Zombies",
+        "HUD"
+      ],
+      "file": "workshop/scripts/t4/zm/zombie_counter.gsc"
+    },
+    {
+      "id": "t5-mp-health-display",
+      "name": "Health display",
+      "game": "t5",
+      "mode": "mp",
+      "author": "Blutac Launcher",
+      "version": "1.0",
+      "summary": "Shows your current health as a number on the left side of the screen.",
+      "description": "Adds a small \"Health\" readout on the left edge of the screen that updates ten times a second. It works with any map and turns off when you remove the script.",
+      "tags": [
+        "Multiplayer",
+        "HUD"
+      ],
+      "file": "workshop/scripts/t5/mp/health_display.gsc"
+    },
+    {
+      "id": "t5-zm-health-display",
+      "name": "Health display",
+      "game": "t5",
+      "mode": "zm",
+      "author": "Blutac Launcher",
+      "version": "1.0",
+      "summary": "Shows your current health as a number on the left side of the screen.",
+      "description": "Adds a small \"Health\" readout on the left edge of the screen that updates ten times a second. It works with any map and turns off when you remove the script.",
+      "tags": [
+        "Zombies",
+        "HUD"
+      ],
+      "file": "workshop/scripts/t5/zm/health_display.gsc"
+    },
+    {
+      "id": "t5-zm-zombie-counter",
+      "name": "Zombie counter",
+      "game": "t5",
+      "mode": "zm",
+      "author": "Blutac Launcher",
+      "version": "1.0",
+      "summary": "Shows how many zombies are left in the round.",
+      "description": "Adds a \"Zombies left\" readout under the left edge of the screen. It counts the zombies that are alive plus the ones still waiting to spawn, so it reaches zero when the round ends.",
+      "tags": [
+        "Zombies",
+        "HUD"
+      ],
+      "file": "workshop/scripts/t5/zm/zombie_counter.gsc"
+    },
+    {
+      "id": "t6-mp-health-display",
+      "name": "Health display",
+      "game": "t6",
+      "mode": "mp",
+      "author": "Blutac Launcher",
+      "version": "1.0",
+      "summary": "Shows your current health as a number on the left side of the screen.",
+      "description": "Adds a small \"Health\" readout on the left edge of the screen that updates ten times a second. It works with any map and turns off when you remove the script.",
+      "tags": [
+        "Multiplayer",
+        "HUD"
+      ],
+      "file": "workshop/scripts/t6/mp/health_display.gsc"
+    },
+    {
+      "id": "t6-zm-health-display",
+      "name": "Health display",
+      "game": "t6",
+      "mode": "zm",
+      "author": "Blutac Launcher",
+      "version": "1.0",
+      "summary": "Shows your current health as a number on the left side of the screen.",
+      "description": "Adds a small \"Health\" readout on the left edge of the screen that updates ten times a second. It works with any map and turns off when you remove the script.",
+      "tags": [
+        "Zombies",
+        "HUD"
+      ],
+      "file": "workshop/scripts/t6/zm/health_display.gsc"
+    },
+    {
+      "id": "t6-zm-zombie-counter",
+      "name": "Zombie counter",
+      "game": "t6",
+      "mode": "zm",
+      "author": "Blutac Launcher",
+      "version": "1.0",
+      "summary": "Shows how many zombies are left in the round.",
+      "description": "Adds a \"Zombies left\" readout under the left edge of the screen. It counts the zombies that are alive plus the ones still waiting to spawn, so it reaches zero when the round ends.",
+      "tags": [
+        "Zombies",
+        "HUD"
+      ],
+      "file": "workshop/scripts/t6/zm/zombie_counter.gsc"
     }
   ]
 }

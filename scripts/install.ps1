@@ -10,7 +10,8 @@ $ErrorActionPreference = 'Stop'
 
 $Name    = 'Blutac Launcher'
 $OldName = 'Quality of Life Mod Manager'
-$Exe     = 'QualityOfLifeModManager.exe'
+$Exe     = 'BlutacLauncher.exe'
+$OldExe  = 'QualityOfLifeModManager.exe'   # 2.3.0 and older
 $RegKey  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager"
 $Dest    = Join-Path $env:LOCALAPPDATA "Programs\$Name"
 $known   = (Get-ItemProperty $RegKey -ErrorAction SilentlyContinue).InstallLocation
@@ -29,7 +30,7 @@ function Remove-Shortcuts {
 }
 
 if ($Uninstall) {
-    Get-Process -Name ($Exe -replace '\.exe$','') -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process -Name ($Exe -replace '\.exe$',''), ($OldExe -replace '\.exe$','') -ErrorAction SilentlyContinue | Stop-Process -Force
     Remove-Shortcuts
     Remove-Item $RegKey -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path $Dest) {
@@ -46,10 +47,11 @@ $src = $Source
 if (-not (Test-Path (Join-Path $src $Exe))) { $src = Join-Path (Split-Path -Parent $PSScriptRoot) 'dist' }
 if (-not (Test-Path (Join-Path $src $Exe))) { throw "$Exe not found next to this script or in ..\dist" }
 
-Get-Process -Name ($Exe -replace '\.exe$','') -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process -Name ($Exe -replace '\.exe$',''), ($OldExe -replace '\.exe$','') -ErrorAction SilentlyContinue | Stop-Process -Force
 New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 robocopy $src $Dest /E /XF QualityOfLife.ini /R:3 /W:1 /NFL /NDL /NJH /NJS | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "copy failed ($LASTEXITCODE)" }
+Remove-Item (Join-Path $Dest $OldExe) -Force -ErrorAction SilentlyContinue
 
 $target = Join-Path $Dest $Exe
 $ver = (Get-Item $target).VersionInfo.FileVersion
@@ -73,7 +75,7 @@ Set-ItemProperty $RegKey DisplayVersion $ver
 Set-ItemProperty $RegKey Publisher 'DavidHiFi'
 Set-ItemProperty $RegKey DisplayIcon $target
 Set-ItemProperty $RegKey InstallLocation $Dest
-Set-ItemProperty $RegKey URLInfoAbout 'https://github.com/DavidHiFi/QualityOfLifeModManager'
+Set-ItemProperty $RegKey URLInfoAbout 'https://github.com/DavidHiFi/Blutac-Launcher'
 Set-ItemProperty $RegKey UninstallString ('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $Dest 'install.ps1') + '" -Uninstall')
 Set-ItemProperty $RegKey NoModify 1 -Type DWord
 Set-ItemProperty $RegKey NoRepair 1 -Type DWord

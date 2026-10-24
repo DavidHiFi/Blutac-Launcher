@@ -93,7 +93,8 @@ namespace HomeCatalog {
 
 QString catalogUrl()
 {
-    return QStringLiteral(QOL_HOME_FEED_URL);
+    // QOL_HOME_FEED=<url or local file>: try a catalog before it is pushed.
+    return qEnvironmentVariable("QOL_HOME_FEED", QStringLiteral(QOL_HOME_FEED_URL));
 }
 
 QString defaultPath()
@@ -119,6 +120,7 @@ Catalog parseCatalog(const QByteArray &raw, QString &error)
     const QJsonObject root = doc.object();
     c.title = root.value("title").toString();
     c.featured = toStringList(root.value("featured"));
+    c.hubs = toStringList(root.value("hubs"));
 
     for (const QJsonValue &v : root.value("games").toArray()) {
         const QJsonObject o = v.toObject();
@@ -133,7 +135,15 @@ Catalog parseCatalog(const QByteArray &raw, QString &error)
             c.games << g;
     }
 
-    for (const QJsonValue &v : root.value("mods").toArray()) {
+    // Scripts sit in their own "scripts" list: 2.3.0 and older read this file
+    // live and would show them as broken mod cards.
+    QJsonArray entries = root.value("mods").toArray();
+    for (const QJsonValue &v : root.value("scripts").toArray()) {
+        QJsonObject o = v.toObject();
+        o.insert(QStringLiteral("type"), QStringLiteral("script"));
+        entries.append(o);
+    }
+    for (const QJsonValue &v : entries) {
         const QJsonObject o = v.toObject();
         Mod m;
         m.id = o.value("id").toString();
@@ -151,6 +161,13 @@ Catalog parseCatalog(const QByteArray &raw, QString &error)
         m.url = o.value("url").toString();
         m.tags = toStringList(o.value("tags"));
         m.downloads = qint64(o.value("downloads").toDouble());
+        m.type = o.value("type").toString(QStringLiteral("mod"));
+        m.mode = o.value("mode").toString(QStringLiteral("zm"));
+        m.file = o.value("file").toString();
+        m.forMod = o.value("for").toString();
+        m.folder = o.value("folder").toString();
+        if (m.isScript() && m.file.isEmpty())
+            continue;
         if (!m.id.isEmpty())
             c.mods << m;
     }
@@ -189,7 +206,16 @@ Catalog load(const QString &path)
                             : catalogUrl();
 
     QString netError;
-    const QByteArray raw = Downloader::downloadBytes(url, netError, 30000);
+    QByteArray raw;
+    if (isRemote(url)) {
+        raw = Downloader::downloadBytes(url, netError, 30000);
+    } else {
+        QFile local(url);
+        if (local.open(QIODevice::ReadOnly))
+            raw = local.readAll();
+        else
+            netError = local.errorString();
+    }
     if (!raw.isEmpty()) {
         QString parseError;
         c = parseCatalog(raw, parseError);

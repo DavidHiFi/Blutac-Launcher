@@ -1,5 +1,6 @@
 #pragma once
 #include <QHash>
+#include <QSet>
 #include <QTimer>
 #include <QWidget>
 
@@ -15,8 +16,8 @@ class QNetworkAccessManager;
 class AppSettings;
 class HeroSlider;
 
-// Home: slider de destaques + mods agrupados por jogo, alimentada por
-// qol_home.json. Same visual language as the other pages (base.qss).
+// Workshop: featured slider, then mods and GSC scripts grouped by game, fed by
+// qol_home.json. Scripts install straight into Plutonium's script folders.
 class HomePage : public QWidget
 {
     Q_OBJECT
@@ -26,7 +27,6 @@ public:
     void reload();
     void refreshInstallState();
     void selectGame(const QString &gameId);       // "" / "all" = todos
-    QString selectedGame() const { return m_gameFilter; }
     void retranslate();
 
 signals:
@@ -48,6 +48,17 @@ private:
     void applyRemoteCover(const QString &modId, const QPixmap &pm);
     void applyRemoteUrl(const QString &url, const QPixmap &pm);
     QList<HomeCatalog::Mod> filteredMods(const QString &gameId) const;
+    bool matchesFilters(const HomeCatalog::Mod &m) const;
+    void togglePick(const QString &id);
+    void syncChips();
+    void retranslateBar();
+    void setType(const QString &type);
+    HomeCatalog::Presence presenceOf(const HomeCatalog::Mod &m) const;
+    QString scriptDir(const HomeCatalog::Mod &m, QString *missingMod = nullptr) const;
+    void installScript(const QString &modId);
+    void removeScript(const QString &modId);
+    void addLocalScript();
+    void showStatus(const QString &text);
 
     AppSettings &m_settings;
     HomeCatalog::Catalog m_catalog;
@@ -55,8 +66,12 @@ private:
 
     QLineEdit *m_search = nullptr;
     QWidget *m_filterBar = nullptr;
-    QHBoxLayout *m_filterLayout = nullptr;
+    QHBoxLayout *m_filterLayout = nullptr; // games
+    QHBoxLayout *m_hubLayout = nullptr;    // mods that scripts can be made for
     QList<QPushButton *> m_filterButtons;
+    QList<QPushButton *> m_typeButtons;
+    QPushButton *m_addScriptBtn = nullptr;
+    QPushButton *m_shareBtn = nullptr;
     HeroSlider *m_hero = nullptr;
     QScrollArea *m_scroll = nullptr;
     QWidget *m_content = nullptr;
@@ -64,7 +79,8 @@ private:
     QLabel *m_status = nullptr;
     QPushButton *m_importBtn = nullptr;
 
-    QString m_gameFilter = QStringLiteral("all");
+    QSet<QString> m_picked;                    // game ids and hub mod ids; empty = everything
+    QString m_type = QStringLiteral("all");    // "all" | "mod" | "script"
     QString m_query;
     QTimer m_searchDebounce;
     QNetworkAccessManager *m_net = nullptr;

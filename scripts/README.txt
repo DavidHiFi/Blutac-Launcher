@@ -4,7 +4,7 @@ scripts/
 build.ps1 (the one used for releases)
 -------------------------------------
 Dynamic build against an installed Qt 6 MinGW kit, then windeployqt stages
-dist\ with the Qt DLLs next to QualityOfLifeModManager.exe. Zip dist\ and
+dist\ with the Qt DLLs next to BlutacLauncher.exe. Zip dist\ and
 that is the portable download.
 
   powershell -ExecutionPolicy Bypass -File scripts\build.ps1 [-Clean]
@@ -76,7 +76,7 @@ Variables to change (top of the file):
   BUILD_DIR   App build folder (wiped every run).
               Default: build-static   (next to CMakeLists.txt)
 
-  DIST        Output folder. Only QualityOfLifeModManager.exe is copied here.
+  DIST        Output folder. Only BlutacLauncher.exe is copied here.
               Default: dist-static
 
 Uses the "MinGW Makefiles" generator on purpose. Ninja was observed to
@@ -90,10 +90,10 @@ Typical flow
   3. Edit the SET lines if your layout is different
   4. scripts\build-qt-static.bat
   5. scripts\build-app.bat
-  6. Ship dist-static\QualityOfLifeModManager.exe
+  6. Ship dist-static\BlutacLauncher.exe
 
 
 Windows exe icon
 ----------------
-resources/icons/icon.ico is linked into QualityOfLifeModManager.exe via resources/app.rc.in.
+resources/icons/icon.ico is linked into BlutacLauncher.exe via resources/app.rc.in.
 Replace that .ico and rebuild if you want a different mark.

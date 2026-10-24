@@ -2,11 +2,14 @@
 
 #include <QApplication>
 #include <algorithm>
+#include <cmath>
+#include <QRegularExpression>
 #include <QCoreApplication>
 #include <QFile>
 #include <QMap>
 #include <QPainter>
 #include <QPixmap>
+#include <QSettings>
 #include <QTextStream>
 
 namespace {
@@ -920,6 +923,78 @@ Palette paletteFor(const QString &key)
 
 QString g_current = QStringLiteral("nocturne");
 Palette g_palette = nocturne();
+QString g_accent;
+Theme::Material g_material = Theme::Material::Solid;
+int g_tint = 55;
+
+// WCAG relative luminance.
+qreal luminance(const QColor &c)
+{
+    auto lin = [](qreal v) { return v <= 0.03928 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * lin(c.redF()) + 0.7152 * lin(c.greenF()) + 0.0722 * lin(c.blueF());
+}
+
+qreal contrast(const QColor &a, const QColor &b)
+{
+    const qreal la = luminance(a), lb = luminance(b);
+    return (qMax(la, lb) + 0.05) / (qMin(la, lb) + 0.05);
+}
+
+QColor mix(const QColor &a, const QColor &b, qreal t)
+{
+    return QColor::fromRgbF(a.redF() + (b.redF() - a.redF()) * t,
+                            a.greenF() + (b.greenF() - a.greenF()) * t,
+                            a.blueF() + (b.blueF() - a.blueF()) * t);
+}
+
+QString rgba(const QColor &c, qreal alpha)
+{
+    return QStringLiteral("rgba(%1,%2,%3,%4)").arg(c.red()).arg(c.green()).arg(c.blue())
+        .arg(qBound<qreal>(0.0, alpha, 1.0), 0, 'f', 2);
+}
+
+bool paletteIsDark(const Palette &p) { return luminance(QColor(p.value("BG"))) < 0.35; }
+
+// Rebuilds every accent-derived token from one colour, so a custom accent
+// reaches buttons, checks, tints and selection the same way a theme does.
+void overrideAccent(Palette &p, const QColor &a)
+{
+    const bool dark = paletteIsDark(p);
+    p["ACCENT"]       = a.name();
+    p["ACCENT_DARK"]  = mix(a, Qt::black, 0.18).name();
+    p["ACCENT_LIGHT"] = mix(a, Qt::white, 0.15).name();
+    p["ACCENT_SOFT"]  = (dark ? mix(a, Qt::white, 0.28) : mix(a, Qt::black, 0.30)).name();
+    const QColor ink = dark ? QColor(p.value("BG_DEEP")) : QColor(0x1b, 0x1b, 0x1f);
+    p["ACCENT_TEXT"]  = contrast(a, ink) >= contrast(a, Qt::white) ? ink.name() : QStringLiteral("#ffffff");
+    p["TINT1"]        = rgba(a, 0.14);
+    p["TINT2"]        = rgba(a, 0.24);
+    p["TINT3"]        = rgba(a, 0.34);
+    p["TINT_BORDER"]  = rgba(a, 0.45);
+}
+
+// Fills used only by base.qss for the window, sidebar, header and cards.
+// Solid keeps the opaque theme colours; a material turns them into tints
+// over the backdrop and clears plain widgets so it can show through.
+void addSurfaceTokens(Palette &p)
+{
+    const bool solid = g_material == Theme::Material::Solid;
+    const qreal t = g_tint / 100.0;
+    auto fill = [&](const char *name, const char *from, qreal alpha) {
+        p[name] = solid ? p.value(from) : rgba(QColor(p.value(from)), alpha);
+    };
+    p["PANE"] = solid ? p.value("BG") : QStringLiteral("transparent");
+    fill("WIN_BG", "BG", t);
+    fill("DEEP_FILL", "BG_DEEP", t);
+    fill("SIDEBAR_FILL", "SIDEBAR_BG", t * 0.7);
+    fill("HEADER_TOP_FILL", "HEADER_TOP", t * 0.45);
+    fill("HEADER_BOT_FILL", "HEADER_BOT", t * 0.25);
+    fill("CARD_TOP", "SURFACE", t + 0.30);
+    fill("CARD_BOT", "SURFACE_2", t + 0.30);
+    // Caption button hover, the neutral wash Windows 11 uses.
+    const bool dark = paletteIsDark(p);
+    p["CAPTION_HOVER"] = dark ? QStringLiteral("rgba(255,255,255,0.08)") : QStringLiteral("rgba(0,0,0,0.06)");
+    p["CAPTION_PRESS"] = dark ? QStringLiteral("rgba(255,255,255,0.05)") : QStringLiteral("rgba(0,0,0,0.04)");
+}
 
 } // namespace
 
@@ -998,6 +1073,14 @@ void apply(const QString &themeKey)
     const QString key = themeKey.trimmed().isEmpty() ? g_current : normalizeKey(themeKey);
     g_current = key;
     g_palette = paletteFor(key);
+    if (g_accent == QLatin1String("system")) {
+        const QColor sys = systemAccent();
+        if (sys.isValid())
+            overrideAccent(g_palette, sys);
+    } else if (!g_accent.isEmpty()) {
+        overrideAccent(g_palette, QColor(g_accent));
+    }
+    addSurfaceTokens(g_palette);
 
     QFile file(QStringLiteral(":/style/base.qss"));
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -1017,5 +1100,91 @@ void apply(const QString &themeKey)
 
     emit ThemeHub::instance().themeChanged();
 }
+
+void setAccent(const QString &spec) { g_accent = normalizeAccent(spec); }
+QString accentSpec() { return g_accent; }
+
+QString normalizeAccent(const QString &spec)
+{
+    const QString s = spec.trimmed().toLower();
+    if (s == QLatin1String("system"))
+        return s;
+    const QString hex = s.startsWith(QLatin1Char('#')) ? s : QLatin1Char('#') + s;
+    static const QRegularExpression re(QStringLiteral("^#[0-9a-f]{6}$"));
+    return re.match(hex).hasMatch() ? hex : QString();
+}
+
+QColor systemAccent()
+{
+#ifdef Q_OS_WIN
+    // Windows keeps a ramp of eight shades; WinUI fills with Light2 on dark
+    // backgrounds and Dark1 on light ones, so a dark theme stays readable.
+    const QSettings explorer(QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows"
+                                            "\\CurrentVersion\\Explorer\\Accent"),
+                             QSettings::NativeFormat);
+    const QByteArray ramp = explorer.value(QStringLiteral("AccentPalette")).toByteArray();
+    if (ramp.size() >= 32) {
+        const int i = (isDark() ? 1 : 4) * 4;
+        return QColor(quint8(ramp[i]), quint8(ramp[i + 1]), quint8(ramp[i + 2]));
+    }
+    const QSettings dwm(QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\DWM"),
+                        QSettings::NativeFormat);
+    const QVariant v = dwm.value(QStringLiteral("AccentColor"));
+    if (v.isValid()) {
+        const quint32 abgr = quint32(v.toLongLong()); // 0xAABBGGRR
+        return QColor(abgr & 0xff, (abgr >> 8) & 0xff, (abgr >> 16) & 0xff);
+    }
+#endif
+    return QColor();
+}
+
+QList<Swatch> swatches()
+{
+    return {
+        {"Rosewater", "#f4dbd6"}, {"Flamingo", "#f0c6c6"}, {"Pink", "#f5bde6"},
+        {"Mauve", "#c6a0f6"},     {"Red", "#ed8796"},      {"Maroon", "#ee99a0"},
+        {"Peach", "#f5a97f"},     {"Yellow", "#eed49f"},   {"Green", "#a6da95"},
+        {"Teal", "#8bd5ca"},      {"Sky", "#91d7e3"},      {"Sapphire", "#7dc4e4"},
+        {"Blue", "#8aadf4"},      {"Lavender", "#b7bdf8"},
+    };
+}
+
+void setMaterial(Material m, int tintPercent)
+{
+    g_material = m;
+    g_tint = qBound(0, tintPercent, 100);
+}
+
+Material material() { return g_material; }
+int materialTint() { return g_tint; }
+
+QList<Material> materials()
+{
+    return {Material::Solid, Material::Mica, Material::MicaAlt,
+            Material::Acrylic, Material::Blur, Material::Frosted};
+}
+
+QString materialKey(Material m)
+{
+    switch (m) {
+    case Material::Mica:    return QStringLiteral("mica");
+    case Material::MicaAlt: return QStringLiteral("mica_alt");
+    case Material::Acrylic: return QStringLiteral("acrylic");
+    case Material::Blur:    return QStringLiteral("blur");
+    case Material::Frosted: return QStringLiteral("frosted");
+    case Material::Solid:   break;
+    }
+    return QStringLiteral("solid");
+}
+
+Material materialFromKey(const QString &key)
+{
+    for (Material m : materials())
+        if (materialKey(m) == key.trimmed().toLower())
+            return m;
+    return Material::Solid;
+}
+
+bool isDark() { return paletteIsDark(g_palette); }
 
 } // namespace Theme

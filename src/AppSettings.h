@@ -7,6 +7,10 @@ class AppSettings
 {
 public:
     QString theme = "nocturne";
+    QString accent;                         // "" (theme), "system" or "#rrggbb"
+    QString material = "solid";             // solid | mica | mica_alt | acrylic | blur | frosted
+    int materialTint = 55;                  // how much of the theme colour covers the material, 0-100
+    bool customTitleBar = false;            // false = Windows title bar
     QString username;
     QString plutoniumInstance;
     QString waw;

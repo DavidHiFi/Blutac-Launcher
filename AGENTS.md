@@ -187,8 +187,8 @@ throwaway folder that has an empty `bin\plutonium-bootstrapper-win32.exe`.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Clean
-dist\QualityOfLifeModManager.exe -installcheck
-dist\QualityOfLifeModManager.exe -selftest -plutoniumdir <throwaway root>
+dist\BlutacLauncher.exe -installcheck
+dist\BlutacLauncher.exe -selftest -plutoniumdir <throwaway root>
 ```
 
 `-selftest` exercises ReShade install and remove, backup and restore, watchdog unpack and start,
@@ -198,12 +198,19 @@ resolves to as INFO lines (never failures: a throwaway root has neither). The
 ReShade checks need no game running - `removeReShade` refuses while one is, on
 purpose, because the DLL is loaded.
 Screenshots without a display: set `QOL_SCREENSHOT=<png>` and `QOL_PAGE=<index>`
-and run the exe.
+and run the exe with `QT_QPA_PLATFORM=offscreen`. `dist\platforms` only ships
+`qwindows.dll`, so also set `QT_QPA_PLATFORM_PLUGIN_PATH` to the Qt kit's
+`plugins\platforms` folder, or Qt puts a "no Qt platform plugin" error box on
+the desktop. Set `QT_QPA_FONTDIR=C:\Windows\Fonts` too, or every letter renders
+as a box. Run it from a copy of `dist` whose INI has `setup completed=true`, or
+the setup wizard blocks the shot. `QOL_HOME_FEED=<file>` loads a local
+`qol_home.json` in place of the GitHub copy, to check catalog changes before
+they are pushed.
 
 To prove a real online launch without touching the GUI:
 
 ```powershell
-dist\QualityOfLifeModManager.exe -nogui -online -gameid T6 -mode ZM `
+dist\BlutacLauncher.exe -nogui -online -gameid T6 -mode ZM `
     -plutoniumdir "$env:LOCALAPPDATA\Plutonium" -gamedir "<Black Ops II folder>"
 ```
 
@@ -213,7 +220,7 @@ whose parent is the app, with no `plutonium-launcher-win32.exe` in the tree.
 To see what the updater resolves, without the GUI:
 
 ```powershell
-dist\QualityOfLifeModManager.exe -checkupdates
+dist\BlutacLauncher.exe -checkupdates
 ```
 
 Every installed component should print `live`, with `feed` only for ones that
@@ -226,17 +233,17 @@ redirect stdout to a file rather than reading it off the pipe.
 2. `powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Clean`, then
    `powershell -ExecutionPolicy Bypass -File scripts\build-setup.ps1 -NsisDir H:\Plutonium\tools\w64devkit\share\nsis`,
    which verifies every imported DLL, checks a contained extraction of the finished
-   installer, and writes `release\QualityOfLifeModManagerSetup.exe`,
-   `release\QualityOfLifeModManager-portable.zip`, and
-   `release\QualityOfLifeModManager.update.bin`. Attach those three files to a
+   installer, and writes `release\BlutacLauncherSetup.exe`,
+   `release\BlutacLauncher-portable.zip`, and
+   `release\BlutacLauncher.update.bin`. Attach those three files to a
    GitHub release tagged `vX.Y.Z`. Never attach a bare
-   `QualityOfLifeModManager.exe`: users downloaded it as though it were Setup, and
+   `BlutacLauncher.exe`: users downloaded it as though it were Setup, and
    Windows then opened one missing-Qt dialog after another.
 
    The release notes lead with the Setup. Paste this at the top:
 
    ```markdown
-   Download **QualityOfLifeModManagerSetup.exe** and run it - that is the app.
+   Download **BlutacLauncherSetup.exe** and run it - that is the app.
    The `.update.bin` asset is consumed by the app and is not an installer.
    ```
 3. `python scripts\gen_update.py -o qol_update.json`, commit, push. The app compares
@@ -259,9 +266,9 @@ uploads.github.com 4.237.22.36      (this is the real alambic origin; the
 ```
 
 ```bash
-curl -sS --resolve api.github.com:443:140.82.112.5   -X POST -H "Authorization: Bearer $GH_TOKEN"   -H "Accept: application/vnd.github+json"   https://api.github.com/repos/DavidHiFi/QualityOfLifeModManager/releases   -d '{"tag_name":"vX.Y.Z","name":"...","body":"...","draft":false}'
+curl -sS --resolve api.github.com:443:140.82.112.5   -X POST -H "Authorization: Bearer $GH_TOKEN"   -H "Accept: application/vnd.github+json"   https://api.github.com/repos/DavidHiFi/Blutac-Launcher/releases   -d '{"tag_name":"vX.Y.Z","name":"...","body":"...","draft":false}'
 
-curl -sS --resolve uploads.github.com:443:4.237.22.36   -X POST -H "Authorization: Bearer $GH_TOKEN"   -H "Content-Type: application/octet-stream" --data-binary @<file>   "https://uploads.github.com/repos/DavidHiFi/QualityOfLifeModManager/releases/<id>/assets?name=<file>"
+curl -sS --resolve uploads.github.com:443:4.237.22.36   -X POST -H "Authorization: Bearer $GH_TOKEN"   -H "Content-Type: application/octet-stream" --data-binary @<file>   "https://uploads.github.com/repos/DavidHiFi/Blutac-Launcher/releases/<id>/assets?name=<file>"
 ```
 
 Read the release back afterwards and compare every asset `size` against the

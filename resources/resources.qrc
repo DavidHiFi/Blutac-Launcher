@@ -43,6 +43,15 @@
         <file>media/t7_logo.png</file>
         <file>media/t7_bg_mp.jpg</file>
         <file alias="qol_home.json">../qol_home.json</file>
+        <file alias="workshop/scripts/t4/mp/health_display.gsc">../workshop/scripts/t4/mp/health_display.gsc</file>
+        <file alias="workshop/scripts/t4/zm/health_display.gsc">../workshop/scripts/t4/zm/health_display.gsc</file>
+        <file alias="workshop/scripts/t4/zm/zombie_counter.gsc">../workshop/scripts/t4/zm/zombie_counter.gsc</file>
+        <file alias="workshop/scripts/t5/mp/health_display.gsc">../workshop/scripts/t5/mp/health_display.gsc</file>
+        <file alias="workshop/scripts/t5/zm/health_display.gsc">../workshop/scripts/t5/zm/health_display.gsc</file>
+        <file alias="workshop/scripts/t5/zm/zombie_counter.gsc">../workshop/scripts/t5/zm/zombie_counter.gsc</file>
+        <file alias="workshop/scripts/t6/mp/health_display.gsc">../workshop/scripts/t6/mp/health_display.gsc</file>
+        <file alias="workshop/scripts/t6/zm/health_display.gsc">../workshop/scripts/t6/zm/health_display.gsc</file>
+        <file alias="workshop/scripts/t6/zm/zombie_counter.gsc">../workshop/scripts/t6/zm/zombie_counter.gsc</file>
         <file>tools/reshade-verify.ps1</file>
         <file>tools/reshade-watchdog.ps1</file>
         <file>7zip/7z.exe</file>

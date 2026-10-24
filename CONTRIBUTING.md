@@ -4,13 +4,17 @@ Thanks for helping. Bug reports, ideas and pull requests are all welcome.
 
 ## Reporting a bug
 
-[Open an issue](https://github.com/DavidHiFi/QualityOfLifeModManager/issues/new) and include:
+[Open an issue](https://github.com/DavidHiFi/Blutac-Launcher/issues/new) and include:
 
 - what you did, what you expected and what happened instead
 - your Windows version, the app version (shown on the About page) and the game and mod involved
 - a screenshot of any error box, and whether you played LAN or Online
 
-A broken entry in the Home catalog or the update feed is a bug too. Name the mod and what it shows.
+A broken entry in the Workshop catalog or the update feed is a bug too. Name the mod or script and what it shows.
+
+## Sharing a script
+
+Press **Share a script** in the Workshop, or open the [share a script form](https://github.com/DavidHiFi/Blutac-Launcher/issues/new?template=share-a-script.yml). Say which game and mode it is for, and which mod it needs, if any. Only share code you wrote or have permission to share, and run it in game once first.
 
 ## Suggesting a feature
 
@@ -28,8 +32,8 @@ Open an issue that describes what you want to do and why. A screenshot or a mock
 3. Run the checks against the build in `dist\`. Use a throwaway Plutonium folder that holds an empty `bin\plutonium-bootstrapper-win32.exe`, never your real one:
 
    ```powershell
-   dist\QualityOfLifeModManager.exe -installcheck
-   dist\QualityOfLifeModManager.exe -selftest -plutoniumdir <throwaway folder>
+   dist\BlutacLauncher.exe -installcheck
+   dist\BlutacLauncher.exe -selftest -plutoniumdir <throwaway folder>
    ```
 
    Every `-selftest` line should say PASS. If your change touches Setup, also run `scripts\build-setup.ps1 -NsisDir <NSIS folder>`.

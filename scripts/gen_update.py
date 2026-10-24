@@ -2,7 +2,7 @@
 """Build qol_update.json from GitHub latest releases (and optional local files).
 
 Output is consumed by the app from:
-  https://raw.githubusercontent.com/DavidHiFi/QualityOfLifeModManager/main/qol_update.json
+  https://raw.githubusercontent.com/DavidHiFi/Blutac-Launcher/main/qol_update.json
 
 Archives are hashed as the parent; every unpacked file is listed as a child.
 """
@@ -25,17 +25,17 @@ import zipfile
 from pathlib import Path
 
 UA = "QoL-update-gen/2.0"
-HOSTED = "https://raw.githubusercontent.com/DavidHiFi/QualityOfLifeModManager/main/qol_update.json"
+HOSTED = "https://raw.githubusercontent.com/DavidHiFi/Blutac-Launcher/main/qol_update.json"
 
 # id, repo, asset name on the latest release, kind
 CATALOG = [
     {
         "id": "launcher",
-        "repo": "DavidHiFi/QualityOfLifeModManager",
+        "repo": "DavidHiFi/Blutac-Launcher",
         # Keep the updater payload off the public release's list of runnable
         # .exe files. People repeatedly downloaded the old bare exe as though
         # it were Setup, then Windows showed one missing-Qt dialog per DLL.
-        "asset": "QualityOfLifeModManager.update.bin",
+        "asset": "BlutacLauncher.update.bin",
         "kind": "file",
     },
     {

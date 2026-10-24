@@ -2,7 +2,7 @@
 ================================================================================
   Quality Of Life (zm_qol) - ReShade watchdog for Plutonium T6
 
-  Added 2026-08-26. Since 2.0 it ships inside Quality of Life Mod Manager
+  Added 2026-08-26. Since 2.0 it ships inside Blutac Launcher
   (unpacked to tools\ next to the exe) and is started by the Play page's
   ReShade option, or from the Quality of Life page. Leave its window open for
   as long as you want ReShade active.
