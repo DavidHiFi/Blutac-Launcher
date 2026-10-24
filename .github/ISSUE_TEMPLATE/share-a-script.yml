@@ -1,0 +1,63 @@
+name: Share a script
+description: Send a GSC script to the Blutac Launcher Workshop.
+title: "[Script] "
+labels: ["script"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Scripts that are added to the Workshop show up for everyone the next time the launcher refreshes. Only share code you wrote or have permission to share.
+  - type: input
+    id: name
+    attributes:
+      label: Script name
+      placeholder: Zombie counter
+    validations:
+      required: true
+  - type: dropdown
+    id: game
+    attributes:
+      label: Game
+      options:
+        - Black Ops II (T6)
+        - Black Ops (T5)
+        - World at War (T4)
+        - Modern Warfare 3 (IW5)
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - Zombies
+        - Multiplayer
+    validations:
+      required: true
+  - type: input
+    id: for
+    attributes:
+      label: Made for a mod?
+      description: Leave empty if it runs on the base game. Otherwise name the mod, for example Quality of Life or Zombies Declassified.
+  - type: textarea
+    id: description
+    attributes:
+      label: What it does
+      description: One or two sentences. Mention anything it changes or turns off.
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: The script
+      description: Paste the .gsc code, or link a GitHub file or gist.
+      render: c
+    validations:
+      required: true
+  - type: checkboxes
+    id: tested
+    attributes:
+      label: Checks
+      options:
+        - label: I ran it in game and it loads without errors.
+          required: true

@@ -45,6 +45,11 @@ private:
     void handleModFile(const QString &path);
     bool tryCllInstall(const QString &path);
     void tryGithubInstall(const QString &url);
+    void showView(int index);   // 0 = mods, 1 = scripts
+    void applyViewText();
+    void refreshScripts();
+    void onDeleteScript();
+    void importScript(const QString &path);
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dropEvent(QDropEvent *event) override;
@@ -56,6 +61,11 @@ private:
     QComboBox *m_gameCombo = nullptr;
     QLabel *m_titleLabel = nullptr;
     QListWidget *m_modList = nullptr;
+    QListWidget *m_scriptList = nullptr;
+    QStackedWidget *m_listStack = nullptr;
+    QList<QPushButton *> m_viewButtons;
+    QLabel *m_listTitle = nullptr;
+    QLabel *m_listHint = nullptr;
     QLineEdit *m_modPathEdit = nullptr;
     QPushButton *m_installBtn = nullptr;
     QPushButton *m_deleteBtn = nullptr;

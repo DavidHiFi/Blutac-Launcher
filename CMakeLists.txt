@@ -50,6 +50,7 @@ set(SOURCES
     src/QolBackups.cpp
     src/DownloadCenter.cpp
     src/pages/QolPage.cpp
+    src/ScriptStore.cpp
 )
 
 set(HEADERS
@@ -66,6 +67,7 @@ set(HEADERS
     src/Dialogs.h
     src/Theme.h
     src/WindowChrome.h
+    src/ScriptStore.h
     src/I18n.h
     src/ImportKitDialog.h
     src/MakeConfigDialog.h

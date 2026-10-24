@@ -553,6 +553,26 @@ QPushButton#GameChip:checked {
     border: 1px solid @ACCENT@;
     color: @ON_SELECT@;
 }
+QLabel#ChipRowLabel { color: @TEXT_DIM@; font-size: 8.5pt; }
+
+/* Workshop: Everything | Mods | Scripts */
+QPushButton#TypeSegment {
+    background: transparent;
+    border: 1px solid @LINE@;
+    border-right: none;
+    border-radius: 0;
+    padding: 0 14px;
+    color: @TEXT_DIM@;
+    font-size: 9pt;
+}
+QPushButton#TypeSegment[segment="left"]  { border-top-left-radius: @R_SM@; border-bottom-left-radius: @R_SM@; }
+QPushButton#TypeSegment[segment="right"] { border-right: 1px solid @LINE@; border-top-right-radius: @R_SM@; border-bottom-right-radius: @R_SM@; }
+QPushButton#TypeSegment:hover { background-color: @SURFACE_HI@; color: @TEXT_STRONG@; }
+QPushButton#TypeSegment:checked {
+    background-color: @ACCENT@;
+    border-color: @ACCENT@;
+    color: @ACCENT_TEXT@;
+}
 
 /* --- slider de destaques --- */
 #HeroSlideTitle { color: @HERO_TEXT@; font-size: 21pt; font-weight: 600; }

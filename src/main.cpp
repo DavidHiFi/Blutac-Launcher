@@ -9,6 +9,7 @@
 #include "UpdateService.h"
 #include "PlutoniumAuth.h"
 #include "HomeCatalog.h"
+#include "ScriptStore.h"
 #include "VersionCompare.h"
 
 #include <QAbstractButton>
@@ -21,8 +22,10 @@
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QLibrary>
+#include <QMap>
 #include <QOperatingSystemVersion>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -586,6 +589,58 @@ int main(int argc, char *argv[])
                   UpdateService::normalizedDigest(QString(), 40).isEmpty());
             check("digest: a sha1 is not accepted as a sha256",
                   UpdateService::normalizedDigest(real, 64).isEmpty());
+        }
+
+        // Workshop scripts: Plutonium's folders per game and mode, every
+        // catalog script bundled in the exe, and each one installed into a
+        // scratch root and listed back.
+        {
+            const QString root = QDir(QDir::tempPath()).filePath(QStringLiteral("qol-selftest-scripts"));
+            QDir(root).removeRecursively();
+            const QList<QStringList> layouts = {
+                {"t6", "zm", "", "/storage/t6/scripts/zm"},
+                {"t6", "mp", "", "/storage/t6/scripts/mp"},
+                {"t6", "zm", "zm_qol", "/storage/t6/mods/zm_qol/scripts/zm"},
+                {"t5", "zm", "", "/storage/t5/raw/scripts/sp/zom"},
+                {"t5", "mp", "", "/storage/t5/raw/scripts/mp"},
+                {"t4", "zm", "", "/storage/t4/raw/scripts/sp"},
+                {"t4", "mp", "", "/storage/t4/raw/scripts/mp"},
+            };
+            for (const QStringList &l : layouts) {
+                const QString got = ScriptStore::folder(root, l[0], l[1], l[2]);
+                check("script folder: " + l[0] + ' ' + l[1] + (l[2].isEmpty() ? QString() : ' ' + l[2]),
+                      got == QDir::cleanPath(root) + l[3], got);
+            }
+
+            QFile builtIn(QStringLiteral(":/qol_home.json"));
+            QString parseErr;
+            const HomeCatalog::Catalog cat = builtIn.open(QIODevice::ReadOnly)
+                ? HomeCatalog::parseCatalog(builtIn.readAll(), parseErr) : HomeCatalog::Catalog();
+            check("workshop: built-in catalog parses", cat.ok, parseErr);
+            QMap<QString, int> perGame;
+            for (const HomeCatalog::Mod &m : cat.mods) {
+                if (!m.isScript())
+                    continue;
+                QFile f(QStringLiteral(":/") + m.file);
+                if (!f.open(QIODevice::ReadOnly)) {
+                    check("workshop: bundled " + m.id, false, m.file);
+                    continue;
+                }
+                const QString dir = ScriptStore::folder(root, m.game, m.mode);
+                const QString name = QFileInfo(m.file).fileName();
+                const QString werr = ScriptStore::write(dir, name, f.readAll());
+                check("workshop: install " + m.id,
+                      werr.isEmpty() && QFileInfo::exists(dir + QLatin1Char('/') + name),
+                      werr.isEmpty() ? QDir::toNativeSeparators(dir) : werr);
+                ++perGame[m.game];
+            }
+            check("workshop: catalog has scripts", !perGame.isEmpty());
+            for (auto it = perGame.cbegin(); it != perGame.cend(); ++it) {
+                const int listed = int(ScriptStore::installed(root, it.key()).size());
+                check("workshop: listed back " + it.key(), listed == it.value(),
+                      QStringLiteral("%1 of %2").arg(listed).arg(it.value()));
+            }
+            QDir(root).removeRecursively();
         }
 
         // The live feed, as served. This is the check that would have caught

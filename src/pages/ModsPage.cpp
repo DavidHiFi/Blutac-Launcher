@@ -9,6 +9,7 @@
 #include "Downloader.h"
 #include "GithubModInstaller.h"
 #include "HomeCatalog.h"
+#include "ScriptStore.h"
 #include "SmartModInstaller.h"
 #include "Storage.h"
 
@@ -80,14 +81,31 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
     auto *headCol = new QVBoxLayout();
     headCol->setSpacing(2);
     auto *listKicker = new QLabel(tr("BIBLIOTECA"), listCard);
-    listKicker->setObjectName("modsListKicker");
+    listKicker->setProperty("role", "modsListKicker");
     listKicker->setObjectName("CardKicker");
-    auto *listTitle = new QLabel(tr("Mods instalados"), listCard);
-    listTitle->setObjectName("modsListTitle");
-    listTitle->setObjectName("CardTitle");
+    m_listTitle = new QLabel(listCard);
+    m_listTitle->setObjectName("CardTitle");
     headCol->addWidget(listKicker);
-    headCol->addWidget(listTitle);
+    headCol->addWidget(m_listTitle);
     head->addLayout(headCol, 1);
+
+    // Mods | Scripts: which kind of install the list below manages.
+    auto *views = new QHBoxLayout();
+    views->setSpacing(0);
+    for (int i = 0; i < 2; ++i) {
+        auto *b = new QPushButton(listCard);
+        b->setObjectName("TypeSegment");
+        b->setProperty("segment", i == 0 ? "left" : "right");
+        b->setCheckable(true);
+        b->setChecked(i == 0);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setMinimumHeight(32);
+        connect(b, &QPushButton::clicked, this, [this, i]() { showView(i); });
+        views->addWidget(b);
+        m_viewButtons << b;
+    }
+    head->addLayout(views);
+    head->addSpacing(8);
 
     m_gameCombo = new Ui::ComboBox(listCard);
     m_gameCombo->addItems({"World at War", "Black ops", "Black ops II", "Modern Warfare 3"});
@@ -108,18 +126,24 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
     m_titleLabel->setObjectName("MutedHint");
     listLayout->addWidget(m_titleLabel);
 
-    m_modList = new QListWidget(listCard);
-    listLayout->addWidget(m_modList, 1);
+    // Scripts get their own list so selectedMod() (the mod a launch loads)
+    // can never pick up a script.
+    m_listStack = new QStackedWidget(listCard);
+    m_modList = new QListWidget(m_listStack);
+    m_scriptList = new QListWidget(m_listStack);
+    m_listStack->addWidget(m_modList);
+    m_listStack->addWidget(m_scriptList);
+    listLayout->addWidget(m_listStack, 1);
 
     auto *listFoot = new QHBoxLayout();
-    auto *listHint = new QLabel(tr("O mod selecionado e usado ao iniciar o jogo."), listCard);
-    listHint->setObjectName("modsListHint");
-    listHint->setObjectName("MutedHint");
+    m_listHint = new QLabel(listCard);
+    m_listHint->setObjectName("MutedHint");
+    m_listHint->setWordWrap(true);
     m_deleteBtn = new QPushButton(tr("Excluir mod"), listCard);
     auto *deleteBtn = m_deleteBtn;
     deleteBtn->setObjectName("modsDelete");
     deleteBtn->setProperty("cssClass", "danger");
-    listFoot->addWidget(listHint);
+    listFoot->addWidget(m_listHint, 1);
     listFoot->addStretch();
     listFoot->addWidget(deleteBtn);
     listLayout->addLayout(listFoot);
@@ -131,13 +155,13 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
     installLayout->setContentsMargins(18, 15, 18, 16);
     installLayout->setSpacing(10);
     auto *installKicker = new QLabel(tr("INSTALAR"), installCard);
-    installKicker->setObjectName("modsInstallKicker");
+    installKicker->setProperty("role", "modsInstallKicker");
     installKicker->setObjectName("CardKicker");
-    auto *installTitle = new QLabel(tr("Adicionar mod ou mapa"), installCard);
-    installTitle->setObjectName("modsInstallTitle");
+    auto *installTitle = new QLabel(tr("Add a mod, map or script"), installCard);
+    installTitle->setProperty("role", "modsInstallTitle");
     installTitle->setObjectName("CardTitle");
     auto *installDesc = new QLabel(
-        tr("Zip, Rar, 7z, exe, .cll ou link do GitHub — Drop a mod file here."), installCard);
+        tr("Zip, Rar, 7z, exe, .cll, .gsc or a GitHub link. You can also drop a file here."), installCard);
     installDesc->setObjectName("modsInstallDesc");
     installLayout->addWidget(installKicker);
     installLayout->addWidget(installTitle);
@@ -185,7 +209,12 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
     connect(deselectBtn, &QPushButton::clicked, this, [this]() { onRefreshOrDeselect(true); });
     connect(browseBtn, &QPushButton::clicked, this, &ModsPage::onBrowseModFile);
     connect(m_installBtn, &QPushButton::clicked, this, &ModsPage::onInstallMod);
-    connect(deleteBtn, &QPushButton::clicked, this, &ModsPage::onDeleteMod);
+    connect(deleteBtn, &QPushButton::clicked, this, [this]() {
+        if (m_listStack->currentIndex() == 1)
+            onDeleteScript();
+        else
+            onDeleteMod();
+    });
 
     connect(&m_installWatcher, &QFutureWatcher<QString>::finished, this, [this]() {
         setBusy(false);
@@ -355,6 +384,75 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
     });
 
     onGameSelected(m_gameCombo->currentText());
+    showView(0);
+}
+
+void ModsPage::showView(int index)
+{
+    m_listStack->setCurrentIndex(index);
+    for (int i = 0; i < m_viewButtons.size(); ++i)
+        m_viewButtons[i]->setChecked(i == index);
+    applyViewText();
+}
+
+void ModsPage::applyViewText()
+{
+    const bool scripts = m_listStack->currentIndex() == 1;
+    const QString game = m_gameCombo->currentText();
+    m_viewButtons[0]->setText(tr("Mods"));
+    m_viewButtons[1]->setText(tr("Scripts"));
+    m_listTitle->setText(scripts ? tr("Installed scripts") : tr("Mods instalados"));
+    m_listHint->setText(scripts ? tr("Plutonium loads these every time you start the game, with or without a mod.")
+                                : tr("O mod selecionado e usado ao iniciar o jogo."));
+    if (game.isEmpty())
+        m_titleLabel->setText(tr("Selecione um jogo para ver os mods"));
+    else
+        m_titleLabel->setText(scripts ? tr("Scripts for %1").arg(game) : tr("Mods disponiveis para %1").arg(game));
+    if (m_job != Job::Remove)
+        m_deleteBtn->setText(scripts ? tr("Remove script") : tr("Excluir mod"));
+}
+
+void ModsPage::refreshScripts()
+{
+    m_scriptList->clear();
+    const QString sid = Storage::gameStorageId(m_settings.modId);
+    for (const ScriptStore::Installed &s : ScriptStore::installed(m_settings.plutoniumInstance, sid)) {
+        auto *item = new QListWidgetItem(QDir::toNativeSeparators(s.label));
+        item->setData(Qt::UserRole, s.path);
+        item->setToolTip(QDir::toNativeSeparators(s.path));
+        m_scriptList->addItem(item);
+    }
+}
+
+void ModsPage::onDeleteScript()
+{
+    auto *item = m_scriptList->currentItem();
+    if (!item) {
+        QMessageBox::information(this, tr("Remove script"), tr("Pick a script in the list first."));
+        return;
+    }
+    const QString path = item->data(Qt::UserRole).toString();
+    if (QMessageBox::question(this, tr("Remove script"),
+                              tr("Move %1 to the Recycle Bin?").arg(item->text()))
+        != QMessageBox::Yes)
+        return;
+    const QString err = ScriptStore::remove(path);
+    if (!err.isEmpty())
+        QMessageBox::warning(this, tr("Remove script"), err);
+    refreshScripts();
+    emit catalogChanged();
+}
+
+void ModsPage::importScript(const QString &path)
+{
+    const QString done = ScriptStore::importWithDialog(this, m_settings.plutoniumInstance, path,
+                                                       Storage::gameStorageId(m_settings.modId));
+    if (done.isEmpty())
+        return;
+    m_modPathEdit->clear();
+    refreshScripts();
+    showView(1);
+    emit catalogChanged();
 }
 
 QString ModsPage::selectedMod() const
@@ -425,6 +523,7 @@ void ModsPage::refreshList()
         if (!keep.isEmpty() && r.id.compare(keep, Qt::CaseInsensitive) == 0)
             m_modList->setCurrentItem(item);
     }
+    refreshScripts();
     emit selectionChanged();
 }
 
@@ -433,7 +532,8 @@ void ModsPage::onGameSelected(const QString &gameName)
     if (gameName.isEmpty())
         return;
     m_settings.modId = gameName;
-    m_titleLabel->setText(tr("Mods disponiveis para %1").arg(gameName));
+    if (m_listStack)
+        applyViewText();
     refreshList();
 }
 
@@ -458,7 +558,7 @@ void ModsPage::onBrowseModFile()
 {
     const QString file = QFileDialog::getOpenFileName(
         this, tr("Procurar"), QString(),
-        tr("Mod files (*.zip *.rar *.7z *.exe *.cll)"));
+        tr("Mods and scripts (*.zip *.rar *.7z *.exe *.cll *.gsc *.csc)"));
     if (!file.isEmpty())
         handleModFile(file);
 }
@@ -477,7 +577,7 @@ void ModsPage::setBusy(bool busy)
     if (m_deleteBtn && busy && m_job == Job::Remove)
         m_deleteBtn->setText(tr("Removendo..."));
     else if (m_deleteBtn)
-        m_deleteBtn->setText(tr("Excluir mod"));
+        applyViewText();
 }
 
 void ModsPage::dragEnterEvent(QDragEnterEvent *event)
@@ -498,6 +598,10 @@ void ModsPage::dropEvent(QDropEvent *event)
 
 void ModsPage::handleModFile(const QString &path)
 {
+    if (ScriptStore::isScriptFile(path)) {
+        importScript(path);
+        return;
+    }
     m_modPathEdit->setText(path);
     if (!CllInstaller::isSupportedArchive(path))
         return;
@@ -783,23 +887,22 @@ void ModsPage::runSevenZipBootstrap()
 
 void ModsPage::retranslate()
 {
-    if (auto *w = findChild<QLabel*>("modsListKicker")) w->setText(tr("BIBLIOTECA"));
-    if (auto *w = findChild<QLabel*>("modsListTitle")) w->setText(tr("Mods instalados"));
+    // The card labels carry their style in objectName, so they are found by role.
+    auto label = [this](const char *role) -> QLabel * {
+        for (QLabel *l : findChildren<QLabel *>())
+            if (l->property("role").toByteArray() == role)
+                return l;
+        return nullptr;
+    };
+    if (auto *w = label("modsListKicker")) w->setText(tr("BIBLIOTECA"));
     if (auto *w = findChild<QPushButton*>("modsRefresh")) w->setText(tr("Atualizar"));
     if (auto *w = findChild<QPushButton*>("modsDeselect")) w->setText(tr("Limpar selecao"));
-    if (auto *w = findChild<QLabel*>("modsListHint")) w->setText(tr("O mod selecionado e usado ao iniciar o jogo."));
-    if (auto *w = findChild<QPushButton*>("modsDelete")) w->setText(tr("Excluir mod"));
-    if (auto *w = findChild<QLabel*>("modsInstallKicker")) w->setText(tr("INSTALAR"));
-    if (auto *w = findChild<QLabel*>("modsInstallTitle")) w->setText(tr("Adicionar mod ou mapa"));
+    if (auto *w = label("modsInstallKicker")) w->setText(tr("INSTALAR"));
+    if (auto *w = label("modsInstallTitle")) w->setText(tr("Add a mod, map or script"));
     if (auto *w = findChild<QLabel*>("modsInstallDesc"))
-        w->setText(tr("Zip, Rar, 7z, exe, .cll ou link do GitHub — Drop a mod file here."));
+        w->setText(tr("Zip, Rar, 7z, exe, .cll, .gsc or a GitHub link. You can also drop a file here."));
     if (auto *w = findChild<QPushButton*>("modsBrowse")) w->setText(tr("Procurar"));
     if (m_installBtn) m_installBtn->setText(tr("Instalar mod"));
     if (m_modPathEdit) m_modPathEdit->setPlaceholderText(tr("Arquivo do mod ou link do GitHub"));
-    if (m_gameCombo && !m_gameCombo->currentText().isEmpty())
-        m_titleLabel->setText(tr("Mods disponiveis para %1").arg(m_gameCombo->currentText()));
-    else if (m_titleLabel)
-        m_titleLabel->setText(tr("Selecione um jogo para ver os mods"));
-    if (m_deleteBtn)
-        m_deleteBtn->setText(tr("Excluir mod"));
+    applyViewText();
 }

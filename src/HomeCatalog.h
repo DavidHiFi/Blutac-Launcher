@@ -23,6 +23,13 @@ struct Mod
     QString url;
     QStringList tags;
     qint64 downloads = 0;
+    QString type;        // "mod" | "script"
+    QString mode;        // script: "zm" | "mp"
+    QString file;        // script: repo path, also bundled at ":/<file>"
+    QString forMod;      // script: id of the mod it was made for ("for" in the JSON)
+    QString folder;      // mod: its folder under storage/<game>/mods
+
+    bool isScript() const { return type == QLatin1String("script"); }
 };
 
 struct Game
@@ -40,6 +47,7 @@ struct Catalog
     QString title;
     QList<Game> games;
     QStringList featured; // ids de mods, na ordem do slider
+    QStringList hubs;     // mod ids offered as filters next to the games
     QList<Mod> mods;
     bool ok = false;
     bool fromCache = false;
@@ -64,6 +72,7 @@ QString defaultPath();
 QString cacheDir();
 
 Catalog load(const QString &path = QString());
+Catalog parseCatalog(const QByteArray &raw, QString &error);
 
 InstallIndex scanInstalled(const QString &plutoniumRoot);
 Presence presenceOf(const Mod &mod, const InstallIndex &index);
