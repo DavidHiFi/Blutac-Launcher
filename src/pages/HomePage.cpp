@@ -855,7 +855,13 @@ void HomePage::buildUi()
     m_contentLayout->addWidget(m_status);
 
     m_hero = new HeroSlider(m_content);
-    m_hero->onInstall = [this](const QString &id) { emit installRequested(id); };
+    m_hero->onInstall = [this](const QString &id) {
+        const HomeCatalog::Mod *m = HomeCatalog::findMod(m_catalog, id);
+        if (m && m->isScript())
+            installScript(id);
+        else
+            emit installRequested(id);
+    };
     m_hero->onDetails = [this](const QString &id) { openDetails(id); };
     m_contentLayout->addWidget(m_hero);
 

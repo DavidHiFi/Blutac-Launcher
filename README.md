@@ -143,7 +143,7 @@ The version lives in `src/Version.h`. [AGENTS.md](AGENTS.md) explains the parts 
 
 <br>
 
-- `qol_home.json` is the Workshop catalog. Edit it and commit, and the app picks it up on its next start. A copy is built into the exe as a fallback. Scripts list a `file` path in this repo, under `workshop\scripts\`.
+- `qol_home.json` is the Workshop catalog. Edit it and commit, and the app picks it up on its next start. A copy is built into the exe as a fallback. Scripts go in its own `scripts` list, which 2.3.0 and older ignore, each with a `file` path under `workshop\scripts\`.
 - `qol_update.json` is the update feed. Regenerate it after each release with `python scripts\gen_update.py -o qol_update.json`, then check it with `python scripts\gen_update.py --verify qol_update.json`. Never edit it by hand.
 
 </details>

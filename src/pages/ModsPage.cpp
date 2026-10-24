@@ -217,13 +217,15 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
     });
 
     connect(&m_installWatcher, &QFutureWatcher<QString>::finished, this, [this]() {
+        const Job job = m_job;
+        // Cleared before setBusy, which only resets the Delete label once no
+        // Remove job is running.
+        m_job = Job::None;
         setBusy(false);
         m_progress->setVisible(false);
         m_progressLabel->setVisible(false);
         m_cancelBtn->setVisible(false);
         const QString err = m_installWatcher.result();
-        const Job job = m_job;
-        m_job = Job::None;
         if (job == Job::Peek && err == QLatin1String("__PEEK_OK__")) {
             auto preview = m_pendingPreview;
             if (!preview.error.isEmpty() && preview.mappings.isEmpty()) {
@@ -550,8 +552,14 @@ void ModsPage::selectGame(const QString &gameId)
 void ModsPage::onRefreshOrDeselect(bool clearSelection)
 {
     refreshList();
-    if (clearSelection)
-        m_modList->setCurrentRow(-1);
+    if (clearSelection) {
+        // In the Scripts view this clears the script pick, never the mod the
+        // next launch loads.
+        if (m_listStack->currentIndex() == 1)
+            m_scriptList->setCurrentRow(-1);
+        else
+            m_modList->setCurrentRow(-1);
+    }
 }
 
 void ModsPage::onBrowseModFile()
@@ -748,6 +756,10 @@ void ModsPage::onInstallMod()
     const QString archivePath = m_modPathEdit->text().trimmed();
     if (GithubModInstaller::looksLikeUrl(archivePath)) {
         tryGithubInstall(archivePath);
+        return;
+    }
+    if (ScriptStore::isScriptFile(archivePath) && QFileInfo::exists(archivePath)) {
+        importScript(archivePath);
         return;
     }
     if (archivePath.isEmpty() || !QFileInfo::exists(archivePath)) {

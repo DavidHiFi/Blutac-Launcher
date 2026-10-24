@@ -20,6 +20,8 @@ namespace T7Patch
     // Blutac did not put it there, empty when it is not installed.
     QString installedVersion(const QString &gameDir);
     bool pluginInstalled(const QString &gameDir);
+    // True when Blutac keeps a record of files it added here, so Remove can act.
+    bool managed(const QString &gameDir);
 
     // Latest release tag (network). Empty on failure.
     QString latestVersion(QString &error);
@@ -44,6 +46,8 @@ namespace T7Patch
     // file while the game runs.
     bool writeConfig(const QString &gameDir, const Config &c, QString &error);
 
-    // Name of a running Black Ops III process, or empty.
+    // Name of a running Black Ops III process, or empty. Changes refuse while one runs.
     QString runningGame();
+    // -selftest only: its checks use a scratch folder no running game can hold.
+    void ignoreRunningGameForSelftest();
 }

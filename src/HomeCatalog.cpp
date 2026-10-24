@@ -135,7 +135,15 @@ Catalog parseCatalog(const QByteArray &raw, QString &error)
             c.games << g;
     }
 
-    for (const QJsonValue &v : root.value("mods").toArray()) {
+    // Scripts sit in their own "scripts" list: 2.3.0 and older read this file
+    // live and would show them as broken mod cards.
+    QJsonArray entries = root.value("mods").toArray();
+    for (const QJsonValue &v : root.value("scripts").toArray()) {
+        QJsonObject o = v.toObject();
+        o.insert(QStringLiteral("type"), QStringLiteral("script"));
+        entries.append(o);
+    }
+    for (const QJsonValue &v : entries) {
         const QJsonObject o = v.toObject();
         Mod m;
         m.id = o.value("id").toString();

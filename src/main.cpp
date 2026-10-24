@@ -613,6 +613,11 @@ int main(int argc, char *argv[])
                 check("script folder: " + l[0] + ' ' + l[1] + (l[2].isEmpty() ? QString() : ' ' + l[2]),
                       got == QDir::cleanPath(root) + l[3], got);
             }
+            check("script folder: a mod folder that climbs out is refused",
+                  ScriptStore::folder(root, QStringLiteral("t6"), QStringLiteral("zm"), QStringLiteral("../../x")).isEmpty());
+            check("script write: only .gsc and .csc",
+                  !ScriptStore::write(root, QStringLiteral("evil.exe"), QByteArrayLiteral("x")).isEmpty()
+                      && !QFileInfo::exists(QDir(root).filePath(QStringLiteral("evil.exe"))));
 
             QFile builtIn(QStringLiteral(":/qol_home.json"));
             QString parseErr;
@@ -663,6 +668,7 @@ int main(int argc, char *argv[])
             const auto at = [&dir](const char *name) { return QDir(dir).filePath(QString::fromLatin1(name)); };
             writeFile(at("BlackOps3.exe"), QByteArray());
             writeFile(at("dsound.dll"), QByteArrayLiteral("players-own"));
+            T7Patch::ignoreRunningGameForSelftest();
 
             QString terr;
             const bool installed = T7Patch::install(dir, {}, terr);
@@ -704,6 +710,21 @@ int main(int argc, char *argv[])
                       QFileInfo::exists(at("modcheck.asi")) && QFileInfo::exists(at("winmm.dll"))
                           && QFileInfo::exists(at("t7patchloader.asi")) && !QFileInfo::exists(at("t7patchloader.dll"))
                           && !QFileInfo::exists(at("dsound.dll")) && T7Patch::pluginInstalled(dir));
+                // A zip that would overwrite the patch's own settings is refused,
+                // and the installed plugin stays.
+                const QString badSrc = QDir(dir).filePath(QStringLiteral("badsrc"));
+                QDir().mkpath(badSrc);
+                writeFile(QDir(badSrc).filePath(QStringLiteral("t7patch.conf")), QByteArrayLiteral("x"));
+                const QString badZip = QDir(dir).filePath(QStringLiteral("bad.zip"));
+                QProcess zip2;
+                zip2.setWorkingDirectory(badSrc);
+                zip2.start(ArchiveTool::findSevenZip(),
+                           {QStringLiteral("a"), QStringLiteral("-tzip"), badZip, QStringLiteral("*")});
+                zip2.waitForFinished(30000);
+                check("t7patch: plugin zip that replaces t7patch.conf is refused",
+                      !T7Patch::installPlugin(dir, badZip, terr) && QFileInfo::exists(at("modcheck.asi"))
+                          && T7Patch::readConfig(dir).playerName == c.playerName,
+                      terr);
                 const bool plugOut = T7Patch::removePlugin(dir, terr);
                 check("t7patch: plugin remove", plugOut, terr);
                 check("t7patch: patch back to its own loader",

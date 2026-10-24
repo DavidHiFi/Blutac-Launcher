@@ -39,6 +39,11 @@ QString folder(const QString &root, const QString &game, const QString &mode,
     const QString base = storage(root, game);
     if (base.isEmpty())
         return QString();
+    // The mod folder comes from the catalog: one plain folder name, nothing
+    // that could climb out of storage.
+    if (modFolder.contains(QLatin1String("..")) || modFolder.contains(QLatin1Char('/'))
+        || modFolder.contains(QLatin1Char('\\')) || modFolder.contains(QLatin1Char(':')))
+        return QString();
     const bool mp = mode == QLatin1String("mp");
     if (game == QLatin1String("t6")) {
         const QString sub = mp ? QStringLiteral("/scripts/mp") : QStringLiteral("/scripts/zm");
@@ -72,7 +77,7 @@ QList<Installed> installed(const QString &root, const QString &game)
                         QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             const QString path = QDir::cleanPath(it.next());
-            out << Installed{path, path.mid(base.size() + 1)};
+            out << Installed{path, QDir(base).relativeFilePath(path)};
         }
     }
     std::sort(out.begin(), out.end(), [](const Installed &a, const Installed &b) {
@@ -85,7 +90,8 @@ QString write(const QString &dir, const QString &name, const QByteArray &bytes)
 {
     if (dir.isEmpty())
         return QObject::tr("Set the Plutonium folder in Settings first.");
-    if (name.isEmpty() || name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\')))
+    if (name.isEmpty() || name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))
+        || !isScriptFile(name))
         return QObject::tr("The script has no usable file name.");
     if (!QDir().mkpath(dir))
         return QObject::tr("Could not create %1").arg(QDir::toNativeSeparators(dir));
@@ -99,7 +105,8 @@ QString remove(const QString &path)
 {
     if (!isScriptFile(path))
         return QObject::tr("Only .gsc and .csc files can be removed here.");
-    if (QFile::moveToTrash(path) || QFile::remove(path))
+    // Recycle Bin only: the messages promise the file can come back.
+    if (QFile::moveToTrash(path))
         return QString();
     return QObject::tr("Could not remove %1").arg(QDir::toNativeSeparators(path));
 }
@@ -173,6 +180,13 @@ QString importWithDialog(QWidget *parent, const QString &root, const QString &fi
         return QString();
     }
     const QString dir = folder(root, game->currentData().toString(), mode->currentData().toString());
+    const QString target = dir + QLatin1Char('/') + QFileInfo(file).fileName();
+    if (QFileInfo::exists(target)
+        && QMessageBox::question(parent, QObject::tr("Add a script"),
+                                 QObject::tr("%1 is already there. Replace it?")
+                                     .arg(QDir::toNativeSeparators(target)))
+               != QMessageBox::Yes)
+        return QString();
     const QString err = write(dir, QFileInfo(file).fileName(), src.readAll());
     if (!err.isEmpty()) {
         QMessageBox::warning(parent, QObject::tr("Add a script"), err);

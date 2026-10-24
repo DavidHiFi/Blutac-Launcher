@@ -17,6 +17,8 @@
 #include <QTemporaryDir>
 #include <QUrl>
 
+#include <atomic>
+
 namespace T7Patch
 {
 
@@ -60,25 +62,58 @@ QStringList toList(const QJsonValue &v)
     return out;
 }
 
+// One T7 Patch job at a time: two would each treat the other's files as the
+// player's and set them aside.
+std::atomic_bool g_busy{false};
+bool g_ignoreRunningGame = false;
+
+struct BusyGuard
+{
+    const bool ok = !g_busy.exchange(true);
+    ~BusyGuard()
+    {
+        if (ok)
+            g_busy = false;
+    }
+};
+
+QString refuseReason()
+{
+    if (!g_ignoreRunningGame) {
+        if (const QString g = runningGame(); !g.isEmpty())
+            return QObject::tr("Close Black Ops III first (%1 is running).").arg(g);
+    }
+    return QString();
+}
+
 // Copies src to dir/rel. A file already there that Blutac did not put there is
-// renamed to <rel>.blutac-backup first and listed in backups.
+// renamed to <rel>.blutac-backup first and listed in backups. The copy lands
+// beside the target first, so a failed copy never leaves the target missing.
 bool place(const QString &src, const QString &dir, const QString &rel, const QStringList &ours,
            QStringList &backups, QString &error)
 {
     const QString dest = QDir(dir).filePath(rel);
+    const QString fresh = dest + QStringLiteral(".blutac-new");
     QDir().mkpath(QFileInfo(dest).absolutePath());
+    QFile::remove(fresh);
+    if (!QFile::copy(src, fresh)) {
+        error = QObject::tr("Could not copy %1 into the game folder.").arg(rel);
+        return false;
+    }
     if (QFileInfo::exists(dest) && !ours.contains(rel, Qt::CaseInsensitive)) {
         if (QFileInfo::exists(dest + kBackup) || !QFile::rename(dest, dest + kBackup)) {
+            QFile::remove(fresh);
             error = QObject::tr("Could not set aside the existing %1. Close Black Ops III and try again.").arg(rel);
             return false;
         }
         backups << rel;
     }
     if (QFileInfo::exists(dest) && !QFile::remove(dest)) {
+        QFile::remove(fresh);
         error = QObject::tr("Could not replace %1. Close Black Ops III and try again.").arg(rel);
         return false;
     }
-    if (!QFile::copy(src, dest)) {
+    if (!QFile::rename(fresh, dest)) {
         error = QObject::tr("Could not copy %1 into the game folder.").arg(rel);
         return false;
     }
@@ -187,10 +222,13 @@ bool install(const QString &gameDir, const Progress &p, QString &error,
                     .arg(QDir::toNativeSeparators(gameDir));
         return false;
     }
-    if (const QString g = runningGame(); !g.isEmpty()) {
-        error = QObject::tr("Close Black Ops III first (%1 is running).").arg(g);
+    const BusyGuard busy;
+    if (!busy.ok) {
+        error = QObject::tr("T7 Patch is busy. Wait for the current job to finish.");
         return false;
     }
+    if (error = refuseReason(); !error.isEmpty())
+        return false;
     if (p) p(QObject::tr("Looking up the latest T7 Patch..."), 5);
     const QString tag = latestVersion(error);
     if (tag.isEmpty()) {
@@ -250,39 +288,74 @@ bool install(const QString &gameDir, const Progress &p, QString &error,
         items.append({found.value(kConf), kConf});
 
     if (p) p(QObject::tr("Copying into the game folder..."), 85);
-    bool ok = true;
+    const QStringList filesBefore = files;
+    const QStringList backupsBefore = backups;
     for (const auto &item : items) {
         if (!place(item.first, gameDir, item.second, files, backups, error)) {
-            ok = false;
-            break;
+            // Undo what this run added and put the player's files back. The
+            // marker is left as it was.
+            QStringList added, setAside;
+            for (const QString &f : files)
+                if (!filesBefore.contains(f, Qt::CaseInsensitive))
+                    added << f;
+            for (const QString &b : backups)
+                if (!backupsBefore.contains(b, Qt::CaseInsensitive))
+                    setAside << b;
+            QString ignored;
+            restore(gameDir, added, setAside, ignored);
+            return false;
         }
         if (!files.contains(item.second, Qt::CaseInsensitive))
             files << item.second;
     }
-    // Saved even after a failure, so Remove can still undo what went in.
     marker.insert(QStringLiteral("files"), QJsonArray::fromStringList(files));
     marker.insert(QStringLiteral("backups"), QJsonArray::fromStringList(backups));
+    marker.insert(QStringLiteral("version"), tag);
+    return writeMarker(gameDir, marker, error);
+}
+
+namespace {
+
+// removePlugin without the busy guard, for the jobs that already hold it.
+bool removePluginHeld(const QString &gameDir, QString &error)
+{
+    QJsonObject marker = readMarker(gameDir);
+    if (!marker.contains(QStringLiteral("plugin")))
+        return true;
+    const QJsonObject plug = marker.value(QStringLiteral("plugin")).toObject();
+    if (!restore(gameDir, toList(plug.value(QStringLiteral("files"))),
+                 toList(plug.value(QStringLiteral("backups"))), error))
+        return false;
+    QStringList ours = toList(marker.value(QStringLiteral("files")));
+    const bool ok = renameOurs(gameDir, ours, kLoaderAsi, kLoaderDll, error)
+                    && renameOurs(gameDir, ours, kParkedDsound, kDsound, error);
+    marker.insert(QStringLiteral("files"), QJsonArray::fromStringList(ours));
     if (ok)
-        marker.insert(QStringLiteral("version"), tag);
+        marker.remove(QStringLiteral("plugin"));
     QString markerError;
     if (!writeMarker(gameDir, marker, markerError) && ok) {
         error = markerError;
-        ok = false;
+        return false;
     }
     return ok;
 }
 
+} // namespace
+
 bool remove(const QString &gameDir, QString &error)
 {
-    if (const QString g = runningGame(); !g.isEmpty()) {
-        error = QObject::tr("Close Black Ops III first (%1 is running).").arg(g);
+    const BusyGuard busy;
+    if (!busy.ok) {
+        error = QObject::tr("T7 Patch is busy. Wait for the current job to finish.");
         return false;
     }
+    if (error = refuseReason(); !error.isEmpty())
+        return false;
     if (readMarker(gameDir).isEmpty()) {
         error = QObject::tr("Blutac did not install T7 Patch here, so it leaves those files alone.");
         return false;
     }
-    if (pluginInstalled(gameDir) && !removePlugin(gameDir, error))
+    if (!removePluginHeld(gameDir, error))
         return false;
     const QJsonObject marker = readMarker(gameDir);
     if (!restore(gameDir, toList(marker.value(QStringLiteral("files"))),
@@ -294,17 +367,19 @@ bool remove(const QString &gameDir, QString &error)
 
 bool installPlugin(const QString &gameDir, const QString &zipPath, QString &error)
 {
-    if (const QString g = runningGame(); !g.isEmpty()) {
-        error = QObject::tr("Close Black Ops III first (%1 is running).").arg(g);
+    const BusyGuard busy;
+    if (!busy.ok) {
+        error = QObject::tr("T7 Patch is busy. Wait for the current job to finish.");
         return false;
     }
+    if (error = refuseReason(); !error.isEmpty())
+        return false;
     if (readMarker(gameDir).value(QStringLiteral("version")).toString().isEmpty()) {
         error = QObject::tr("Install T7 Patch here first. The plugin needs it.");
         return false;
     }
-    if (pluginInstalled(gameDir) && !removePlugin(gameDir, error))
-        return false;
 
+    // The new zip is checked before the installed plugin comes out.
     QTemporaryDir tmp;
     if (!tmp.isValid()) {
         error = QObject::tr("Could not create a temporary folder.");
@@ -318,12 +393,24 @@ bool installPlugin(const QString &gameDir, const QString &zipPath, QString &erro
         error = QObject::tr("That zip is empty.");
         return false;
     }
+    // T7 Patch's own files, under the names they take while the plugin is in.
+    QStringList reserved = {kMarker, QStringLiteral("BlackOps3.exe")};
+    for (const QString &f : toList(readMarker(gameDir).value(QStringLiteral("files")))) {
+        if (f.compare(kDsound, Qt::CaseInsensitive) == 0)
+            reserved << kParkedDsound;
+        else if (f.compare(kLoaderDll, Qt::CaseInsensitive) == 0)
+            reserved << kLoaderAsi;
+        else
+            reserved << f;
+    }
     for (auto it = content.cbegin(); it != content.cend(); ++it) {
-        if (QFileInfo(it.key()).fileName().compare(QLatin1String("BlackOps3.exe"), Qt::CaseInsensitive) == 0) {
-            error = QObject::tr("That zip would replace BlackOps3.exe, so it is not the plugin.");
+        if (reserved.contains(it.key(), Qt::CaseInsensitive)) {
+            error = QObject::tr("That zip would replace %1, so it is not the plugin.").arg(it.key());
             return false;
         }
     }
+    if (!removePluginHeld(gameDir, error))
+        return false;
 
     QJsonObject marker = readMarker(gameDir);
     QStringList ours = toList(marker.value(QStringLiteral("files")));
@@ -356,34 +443,34 @@ bool installPlugin(const QString &gameDir, const QString &zipPath, QString &erro
         error = markerError;
         ok = false;
     }
+    // A half-installed plugin comes back out, leaving T7 Patch as it was.
+    if (!ok) {
+        QString ignored;
+        removePluginHeld(gameDir, ignored);
+    }
     return ok;
 }
 
 bool removePlugin(const QString &gameDir, QString &error)
 {
-    if (const QString g = runningGame(); !g.isEmpty()) {
-        error = QObject::tr("Close Black Ops III first (%1 is running).").arg(g);
+    const BusyGuard busy;
+    if (!busy.ok) {
+        error = QObject::tr("T7 Patch is busy. Wait for the current job to finish.");
         return false;
     }
-    QJsonObject marker = readMarker(gameDir);
-    if (!marker.contains(QStringLiteral("plugin")))
-        return true;
-    const QJsonObject plug = marker.value(QStringLiteral("plugin")).toObject();
-    if (!restore(gameDir, toList(plug.value(QStringLiteral("files"))),
-                 toList(plug.value(QStringLiteral("backups"))), error))
+    if (error = refuseReason(); !error.isEmpty())
         return false;
-    QStringList ours = toList(marker.value(QStringLiteral("files")));
-    const bool ok = renameOurs(gameDir, ours, kLoaderAsi, kLoaderDll, error)
-                    && renameOurs(gameDir, ours, kParkedDsound, kDsound, error);
-    marker.insert(QStringLiteral("files"), QJsonArray::fromStringList(ours));
-    if (ok)
-        marker.remove(QStringLiteral("plugin"));
-    QString markerError;
-    if (!writeMarker(gameDir, marker, markerError) && ok) {
-        error = markerError;
-        return false;
-    }
-    return ok;
+    return removePluginHeld(gameDir, error);
+}
+
+bool managed(const QString &gameDir)
+{
+    return !gameDir.isEmpty() && !readMarker(gameDir).isEmpty();
+}
+
+void ignoreRunningGameForSelftest()
+{
+    g_ignoreRunningGame = true;
 }
 
 Config readConfig(const QString &gameDir)

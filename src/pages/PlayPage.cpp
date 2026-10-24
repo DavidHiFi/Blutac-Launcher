@@ -676,7 +676,8 @@ QWidget *PlayPage::t7PatchTab(QWidget *parent, const QString &gameDir)
                         : ours      ? tr("Installed: %1").arg(v)
                                     : tr("Installed outside Blutac"));
         installBtn->setText(v.isEmpty() ? tr("Install") : tr("Update"));
-        removeBtn->setEnabled(ours);
+        installBtn->setEnabled(true);
+        removeBtn->setEnabled(T7Patch::managed(gameDir));
         const T7Patch::Config c = T7Patch::readConfig(gameDir);
         name->setText(c.playerName);
         password->setText(c.networkPassword);
@@ -691,7 +692,8 @@ QWidget *PlayPage::t7PatchTab(QWidget *parent, const QString &gameDir)
     });
     (*refresh)();
 
-    connect(installBtn, &QPushButton::clicked, page, [this, gameDir, refresh]() {
+    connect(installBtn, &QPushButton::clicked, page, [this, installBtn, gameDir, refresh]() {
+        installBtn->setEnabled(false); // refresh turns it back on when the job settles
         DownloadCenter::run(this, tr("Installing T7 Patch"),
             [gameDir](QString &error, const DownloadCenter::Progress &report, const CancelHandle &canc) {
                 return T7Patch::install(gameDir, report, error, [canc]() { return canc && (*canc)(); });
