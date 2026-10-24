@@ -39,7 +39,7 @@ int runInstallCheck()
     QTextStream out(stdout);
     const QString root = QCoreApplication::applicationDirPath();
     const QStringList requiredFiles = {
-        QStringLiteral("QualityOfLifeModManager.exe"),
+        QFileInfo(QCoreApplication::applicationFilePath()).fileName(),
         QStringLiteral("Qt6Core.dll"),
         QStringLiteral("Qt6Gui.dll"),
         QStringLiteral("Qt6Widgets.dll"),

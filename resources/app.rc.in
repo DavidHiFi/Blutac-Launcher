@@ -13,8 +13,8 @@ FILETYPE       0x1L
       VALUE "CompanyName",      "@APP_AUTHOR@"
       VALUE "FileDescription",  "@APP_NAME@"
       VALUE "FileVersion",      "@APP_VERSION@"
-      VALUE "InternalName",     "QualityOfLifeModManager"
-      VALUE "OriginalFilename", "QualityOfLifeModManager.exe"
+      VALUE "InternalName",     "BlutacLauncher"
+      VALUE "OriginalFilename", "BlutacLauncher.exe"
       VALUE "ProductName",      "@APP_NAME@"
       VALUE "ProductVersion",   "@APP_VERSION@"
     }

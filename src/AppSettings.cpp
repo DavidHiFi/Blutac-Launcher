@@ -125,6 +125,10 @@ bool AppSettings::loadFromIni()
     aw                = ini.value("advanced warfare folder", aw).toString();
     bo3               = ini.value("black ops 3 folder", bo3).toString();
     theme             = ini.value("theme", theme).toString();
+    accent            = ini.value("accent", accent).toString();
+    material          = ini.value("window material", material).toString();
+    materialTint      = qBound(0, ini.value("window tint", materialTint).toInt(), 100);
+    customTitleBar    = ini.value("custom title bar", customTitleBar).toBool();
     setupCompleted    = ini.value("setup completed", false).toBool();
     language          = ini.value("language", language).toString();
     homeEnabled       = ini.value("home enabled", true).toBool();
@@ -166,6 +170,10 @@ void AppSettings::saveToIni() const
     ini.setValue("advanced warfare folder", copy.aw);
     ini.setValue("black ops 3 folder", copy.bo3);
     ini.setValue("theme", copy.theme);
+    ini.setValue("accent", copy.accent);
+    ini.setValue("window material", copy.material);
+    ini.setValue("window tint", copy.materialTint);
+    ini.setValue("custom title bar", copy.customTitleBar);
     ini.setValue("setup completed", copy.setupCompleted);
     ini.setValue("language", copy.language);
     ini.setValue("home enabled", copy.homeEnabled);

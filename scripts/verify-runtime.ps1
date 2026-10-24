@@ -13,7 +13,7 @@ if (-not (Test-Path -LiteralPath $ObjDump -PathType Leaf)) {
 }
 
 $required = @(
-    'QualityOfLifeModManager.exe',
+    'BlutacLauncher.exe',
     'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll', 'Qt6Svg.dll',
     'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll',
     'D3Dcompiler_47.dll',
@@ -72,7 +72,7 @@ if ($problems.Count) {
 $checkOut = Join-Path ([IO.Path]::GetTempPath()) ("qol-installcheck-" + [guid]::NewGuid().ToString('N') + '.out')
 $checkErr = "$checkOut.err"
 try {
-    $process = Start-Process -FilePath (Join-Path $Dist 'QualityOfLifeModManager.exe') `
+    $process = Start-Process -FilePath (Join-Path $Dist 'BlutacLauncher.exe') `
         -ArgumentList '-installcheck' -WorkingDirectory $Dist -Wait -PassThru `
         -WindowStyle Hidden -RedirectStandardOutput $checkOut -RedirectStandardError $checkErr
     $output = ((Get-Content -LiteralPath $checkOut -Raw -ErrorAction SilentlyContinue) +

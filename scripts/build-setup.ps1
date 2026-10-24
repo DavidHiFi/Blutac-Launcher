@@ -1,7 +1,7 @@
-# Packages the Quality of Life Mod Manager release files from dist\.
+# Packages the Blutac Launcher release files from dist\.
 #   powershell -ExecutionPolicy Bypass -File scripts\build-setup.ps1 [-NsisDir <dir>] [-OutDir <dir>]
-# Builds QualityOfLifeModManagerSetup.exe (NSIS, per-user, Qt+MinGW runtime
-# bundled), QualityOfLifeModManager-portable.zip, and the non-runnable-named
+# Builds BlutacLauncherSetup.exe (NSIS, per-user, Qt+MinGW runtime
+# bundled), BlutacLauncher-portable.zip, and the non-runnable-named
 # in-app update payload from the same staged tree.
 # Version comes from src/Version.h (CLL_VERSION). Build dist\ first with
 # scripts\build.ps1.
@@ -21,7 +21,7 @@ $verLine = Select-String -Path (Join-Path $Root 'src\Version.h') -Pattern '#defi
 if (-not $verLine) { throw 'CLL_VERSION not found in src/Version.h' }
 $Version = $verLine.Matches[0].Groups[1].Value
 
-$exe = Join-Path $Dist 'QualityOfLifeModManager.exe'
+$exe = Join-Path $Dist 'BlutacLauncher.exe'
 if (-not (Test-Path $exe)) { throw "dist exe missing: $exe. Run scripts\build.ps1 first." }
 
 if (-not $NsisDir) {
@@ -50,9 +50,9 @@ if ($LASTEXITCODE -ge 8) { throw "stage copy failed ($LASTEXITCODE)" }
 if ($LASTEXITCODE -ne 0) { throw "runtime verification failed ($LASTEXITCODE)" }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-$setup = Join-Path $OutDir 'QualityOfLifeModManagerSetup.exe'
-$zip = Join-Path $OutDir 'QualityOfLifeModManager-portable.zip'
-$updatePayload = Join-Path $OutDir 'QualityOfLifeModManager.update.bin'
+$setup = Join-Path $OutDir 'BlutacLauncherSetup.exe'
+$zip = Join-Path $OutDir 'BlutacLauncher-portable.zip'
+$updatePayload = Join-Path $OutDir 'BlutacLauncher.update.bin'
 
 $env:NSISDIR = $NsisDir
 & $makensis "/DDIST=$Stage" "/DVERSION=$Version" "/DOUTFILE=$setup" (Join-Path $PSScriptRoot 'setup.nsi')
@@ -82,7 +82,7 @@ finally {
 
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $Stage '*') -DestinationPath $zip -CompressionLevel Optimal
-Copy-Item -LiteralPath (Join-Path $Stage 'QualityOfLifeModManager.exe') -Destination $updatePayload -Force
+Copy-Item -LiteralPath (Join-Path $Stage 'BlutacLauncher.exe') -Destination $updatePayload -Force
 
 Write-Host "Version: $Version"
 Write-Host "Setup:   $setup ($([Math]::Round((Get-Item $setup).Length / 1MB, 1)) MB)"

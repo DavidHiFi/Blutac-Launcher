@@ -18,6 +18,7 @@ class SettingsPage;
 class AboutPage;
 class HomePage;
 class QolPage;
+class CaptionButtons;
 
 class MainWindow : public QMainWindow
 {
@@ -57,7 +58,13 @@ private:
     void persistGameOrder();
     void updateOrganizeOverlay();
     bool eventFilter(QObject *obj, QEvent *event) override;
+    bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
+    void changeEvent(QEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    // Accent, material and theme from m_settings, applied live where the
+    // window allows it; Settings is told when the rest needs a restart.
+    void applySettingsLook();
+    void restartApp();
     void closeEvent(QCloseEvent *event) override;
     void reportFailedSelfUpdate(const SelfUpdate::Outcome &swap);
 
@@ -98,4 +105,10 @@ private:
     QString m_runningGameId;
     qint64 m_serverPid = 0;
     QTimer m_processPollTimer;
+
+    // Fixed when the window is created: a material needs a translucent
+    // window and the Blutac title bar replaces the Windows caption.
+    bool m_translucent = false;
+    bool m_customTitleBar = false;
+    CaptionButtons *m_caption = nullptr;
 };

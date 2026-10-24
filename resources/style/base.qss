@@ -6,14 +6,17 @@
 * { outline: none; }
 
 QWidget {
-    background-color: @BG@;
+    background-color: @PANE@;
     color: @TEXT@;
     font-family: @FONT@;
     font-size: 10pt;
 }
 
 QLabel { background: transparent; }
-QMainWindow, QDialog { background-color: @BG@; }
+QMainWindow { background-color: @WIN_BG@; }
+QDialog { background-color: @BG@; }
+/* Popups are windows of their own and get no material: keep them opaque. */
+QComboBoxPrivateContainer, QMenu { background-color: @SURFACE@; }
 
 QToolTip {
     background-color: @TOOLTIP_BG@;
@@ -25,7 +28,7 @@ QToolTip {
 
 /* ================= Barra lateral ================= */
 #Sidebar {
-    background-color: @SIDEBAR_BG@;
+    background-color: @SIDEBAR_FILL@;
     border-right: 1px solid @LINE_SOFT@;
 }
 
@@ -133,7 +136,7 @@ QToolTip {
 /* ================= Cabecalho de pagina ================= */
 #HeaderBar {
     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 @HEADER_TOP@, stop:1 @HEADER_BOT@);
+        stop:0 @HEADER_TOP_FILL@, stop:1 @HEADER_BOT_FILL@);
     border-bottom: 1px solid @LINE_SOFT@;
 }
 
@@ -178,7 +181,7 @@ QPushButton#CreditLink:hover {
 /* ================= Cartoes ================= */
 #Card {
     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 @SURFACE@, stop:1 @SURFACE_2@);
+        stop:0 @CARD_TOP@, stop:1 @CARD_BOT@);
     border: 1px solid @LINE_CARD@;
     border-radius: @R@;
 }
@@ -436,7 +439,7 @@ QMessageBox { background-color: @SURFACE@; }
 QLabel#DialogIcon { padding-right: 6px; }
 
 /* ================= Pagina de jogo (hero) ================= */
-#PlayPage { background: @BG_DEEP@; }
+#PlayPage { background: @DEEP_FILL@; }
 
 #HeroCode {
     color: @ACCENT_SOFT@;
@@ -520,11 +523,11 @@ QLabel#DialogIcon { padding-right: 6px; }
 #WizardCardDesc { color: @TEXT_DIM@; }
 
 /* ================= Home (catalogo de mods) ================= */
-#HomePage, #HomeContent { background: @BG@; }
+#HomePage, #HomeContent { background: @PANE@; }
 
 #HomeBar {
     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 @HEADER_TOP@, stop:1 @HEADER_BOT@);
+        stop:0 @HEADER_TOP_FILL@, stop:1 @HEADER_BOT_FILL@);
     border-bottom: 1px solid @LINE_SOFT@;
 }
 /* The row that holds the chips. Every plain QWidget paints @BG@, so this one
@@ -582,7 +585,7 @@ QPushButton#HeroDot:checked { background-color: @ACCENT@; }
 /* --- card de mod --- */
 #ModCard {
     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 @SURFACE@, stop:1 @SURFACE_2@);
+        stop:0 @CARD_TOP@, stop:1 @CARD_BOT@);
     border: 1px solid @LINE_CARD@;
     border-radius: @R@;
 }
@@ -593,3 +596,46 @@ QPushButton#HeroDot:checked { background-color: @ACCENT@; }
 #ModCardUpdate { color: @WARN@; font-size: 8.5pt; font-weight: 600; }
 #ModCardMeta { color: @TEXT_DIM@; font-size: 8.5pt; }
 #ModTags { color: @ACCENT_SOFT@; font-size: 9pt; }
+
+/* ================= Blutac title bar ================= */
+#SidebarBrand, #LookRow { background: transparent; }
+QPushButton#CaptionButton, QPushButton#CaptionClose {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    color: @TEXT@;
+}
+QPushButton#CaptionButton:hover, QPushButton#CaptionButton[hot="true"] { background-color: @CAPTION_HOVER@; border: none; }
+QPushButton#CaptionButton:pressed, QPushButton#CaptionButton[down="true"] { background-color: @CAPTION_PRESS@; }
+QPushButton#CaptionClose:hover { background-color: #c42b1c; color: #ffffff; border: none; }
+QPushButton#CaptionClose:pressed { background-color: #c84031; color: #ffffff; }
+
+/* ================= Appearance (Settings) ================= */
+QPushButton#AccentSwatch {
+    border: 2px solid transparent;
+    border-radius: 13px;
+    padding: 0;
+}
+QPushButton#AccentSwatch:hover { border: 2px solid @LINE_STRONG@; }
+QPushButton#AccentSwatch:checked { border: 2px solid @TEXT_STRONG@; }
+QPushButton#AccentChoice { padding: 6px 12px; }
+QPushButton#AccentChoice:checked {
+    border: 1px solid @ACCENT@;
+    color: @ACCENT_SOFT@;
+    background-color: @TINT1@;
+}
+
+QSlider { background: transparent; min-height: 22px; }
+QSlider::groove:horizontal { height: 4px; background: @LINE@; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: @ACCENT@; border-radius: 2px; }
+QSlider::handle:horizontal {
+    width: 14px;
+    height: 14px;
+    margin: -6px 0;
+    border-radius: 9px;
+    background: @ACCENT@;
+    border: 2px solid @SURFACE@;
+}
+QSlider::handle:horizontal:hover { background: @ACCENT_LIGHT@; }
+QSlider::sub-page:horizontal:disabled, QSlider::handle:horizontal:disabled { background: @DISABLED_LINE@; }

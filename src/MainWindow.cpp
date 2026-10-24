@@ -12,6 +12,7 @@
 #include "UpdateService.h"
 #include "SelfUpdate.h"
 #include "Version.h"
+#include "WindowChrome.h"
 
 #include "pages/PlayPage.h"
 #include "pages/HomePage.h"
@@ -40,6 +41,7 @@
 #include <QPainterPath>
 #include <QCloseEvent>
 #include <QDir>
+#include <QProcess>
 #include <QResizeEvent>
 #include <QtConcurrent/QtConcurrent>
 
@@ -104,6 +106,15 @@ MainWindow::MainWindow(QWidget *parent)
 {
     m_settings = AppSettings::loadForStartup();
     I18n::apply(m_settings.language);
+    // WA_TranslucentBackground only takes when set before the native window
+    // exists, so the material family and the title bar are settled here.
+    const Theme::Material material = Theme::materialFromKey(m_settings.material);
+    m_translucent = material != Theme::Material::Solid && WindowChrome::supports(material);
+    m_customTitleBar = m_settings.customTitleBar && WindowChrome::supportsCustomTitleBar();
+    if (m_translucent)
+        setAttribute(Qt::WA_TranslucentBackground);
+    Theme::setAccent(m_settings.accent);
+    Theme::setMaterial(m_translucent ? material : Theme::Material::Solid, m_settings.materialTint);
     Theme::apply(m_settings.theme);
 
     // A watchdog left running by a session that was killed rather than closed
@@ -168,12 +179,21 @@ MainWindow::MainWindow(QWidget *parent)
     m_organizeOverlay->hide();
     m_organizeOverlay->installEventFilter(this);
 
+    if (m_customTitleBar) {
+        m_caption = new CaptionButtons(this, this);
+        m_caption->raise();
+    }
+    winId();
+    WindowChrome::install(this, m_customTitleBar);
+    WindowChrome::apply(this, Theme::material(), m_customTitleBar);
+
     connect(&ThemeHub::instance(), &ThemeHub::themeChanged, this, [this]() {
         for (auto *b : findChildren<QPushButton*>()) {
             const QString path = b->property("iconPath").toString();
             if (!path.isEmpty() && !b->property("rawIcon").toBool())
                 b->setIcon(Theme::icon(path));
         }
+        WindowChrome::apply(this, Theme::material(), m_customTitleBar);
     });
 
     connect(m_homePage, &HomePage::installRequested, this, [this](const QString &modId) {
@@ -226,6 +246,8 @@ MainWindow::MainWindow(QWidget *parent)
         if (UpdateService::prompt(this, m_settings, false))
             SelfUpdate::quitForSwap();
     });
+    connect(m_settingsPage, &SettingsPage::lookChanged, this, &MainWindow::applySettingsLook);
+    connect(m_settingsPage, &SettingsPage::restartRequested, this, &MainWindow::restartApp);
     connect(m_settingsPage, &SettingsPage::cancelled, this, [this]() {
         if (m_settings.homeEnabled)
             showTool(ToolHome);
@@ -326,7 +348,12 @@ QWidget *MainWindow::buildSidebar()
     layout->setContentsMargins(12, 16, 12, 12);
     layout->setSpacing(3);
 
-    auto *brand = new QHBoxLayout();
+    // The brand row doubles as a title bar handle for the Blutac title bar.
+    auto *brandBox = new QWidget(sidebar);
+    brandBox->setObjectName("SidebarBrand");
+    brandBox->setProperty("dragArea", true);
+    auto *brand = new QHBoxLayout(brandBox);
+    brand->setContentsMargins(0, 0, 0, 0);
     brand->setSpacing(10);
     auto *logo = new AnimatedLogo(sidebar);
     logo->setLogoSize(38);
@@ -340,7 +367,7 @@ QWidget *MainWindow::buildSidebar()
     titles->addWidget(m_sidebarBy);
     brand->addWidget(logo);
     brand->addLayout(titles, 1);
-    layout->addLayout(brand);
+    layout->addWidget(brandBox);
     layout->addSpacing(10);
 
     // The nav column scrolls. Every row in it has a fixed height, so a window
@@ -518,8 +545,10 @@ QWidget *MainWindow::buildHeader()
 {
     m_header = new QWidget(this);
     m_header->setObjectName("HeaderBar");
+    m_header->setProperty("dragArea", true);
     auto *hl = new QHBoxLayout(m_header);
-    hl->setContentsMargins(28, 16, 20, 16);
+    // Leave the caption buttons' corner free.
+    hl->setContentsMargins(28, 16, m_customTitleBar ? 20 + 3 * 46 : 20, 16);
     hl->setSpacing(12);
 
     auto *col = new QVBoxLayout();
@@ -937,8 +966,48 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
+    if (m_caption) {
+        m_caption->move(width() - m_caption->width(), 0);
+        m_caption->raise();
+    }
     if (m_organizeGames)
         updateOrganizeOverlay();
+}
+
+bool MainWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
+{
+    if (eventType == "windows_generic_MSG" && WindowChrome::nativeEvent(this, message, result, m_caption))
+        return true;
+    return QMainWindow::nativeEvent(eventType, message, result);
+}
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    QMainWindow::changeEvent(event);
+    if (event->type() == QEvent::WindowStateChange && m_caption)
+        m_caption->syncState();
+}
+
+void MainWindow::applySettingsLook()
+{
+    const Theme::Material wanted = Theme::materialFromKey(m_settings.material);
+    // A translucent window can show any material, Solid included; an opaque
+    // one stays Solid until the next start.
+    const bool supported = WindowChrome::supports(wanted);
+    const bool live = supported && (m_translucent || wanted == Theme::Material::Solid);
+    Theme::setAccent(m_settings.accent);
+    Theme::setMaterial(live ? wanted : Theme::Material::Solid, m_settings.materialTint);
+    Theme::apply(m_settings.theme);
+    const bool customWanted = m_settings.customTitleBar && WindowChrome::supportsCustomTitleBar();
+    m_settingsPage->setRestartNeeded((supported && !live) || customWanted != m_customTitleBar);
+}
+
+void MainWindow::restartApp()
+{
+    m_settings.saveToIni();
+    if (QProcess::startDetached(QCoreApplication::applicationFilePath(),
+                                QCoreApplication::arguments().mid(1)))
+        close();
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)

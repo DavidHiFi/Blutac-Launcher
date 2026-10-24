@@ -5,8 +5,11 @@
 #include "ImportKitDialog.h"
 #include "../Checkables.h"
 #include "../Theme.h"
+#include "../WindowChrome.h"
 
+#include <QButtonGroup>
 #include <QCheckBox>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
@@ -17,6 +20,8 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSlider>
+#include <QStandardItemModel>
 #include <QVBoxLayout>
 
 namespace {
@@ -45,6 +50,49 @@ QFrame *makeCard(QWidget *parent, const QString &kicker, const QString &title,
     lay->addSpacing(2);
     *bodyOut = lay;
     return card;
+}
+
+QString materialName(Theme::Material m)
+{
+    switch (m) {
+    case Theme::Material::Solid: return SettingsPage::tr("Solid");
+    case Theme::Material::Mica: return SettingsPage::tr("Mica");
+    case Theme::Material::MicaAlt: return SettingsPage::tr("Mica Alt");
+    case Theme::Material::Acrylic: return SettingsPage::tr("Acrylic");
+    case Theme::Material::Blur: return SettingsPage::tr("Blur");
+    case Theme::Material::Frosted: return SettingsPage::tr("Frosted glass");
+    }
+    return QString();
+}
+
+QString materialBlurb(Theme::Material m)
+{
+    switch (m) {
+    case Theme::Material::Solid:
+        return SettingsPage::tr("Plain theme colours. Nothing shows through.");
+    case Theme::Material::Mica:
+        return SettingsPage::tr("A soft tint taken from your wallpaper. Needs Windows 11.");
+    case Theme::Material::MicaAlt:
+        return SettingsPage::tr("Mica with more of the wallpaper's colour. Needs Windows 11 22H2 or later.");
+    case Theme::Material::Acrylic:
+        return SettingsPage::tr("See-through and blurred, like the Start menu. Needs Windows 11 22H2 or later.");
+    case Theme::Material::Blur:
+        return SettingsPage::tr("A clear blur of whatever sits behind the window.");
+    case Theme::Material::Frosted:
+        return SettingsPage::tr("Blur with a fine grain over it, like frosted glass.");
+    }
+    return QString();
+}
+
+void fillMaterials(QComboBox *combo)
+{
+    combo->clear();
+    auto *model = qobject_cast<QStandardItemModel *>(combo->model());
+    for (Theme::Material m : Theme::materials()) {
+        combo->addItem(materialName(m), Theme::materialKey(m));
+        if (model && !WindowChrome::supports(m))
+            model->item(combo->count() - 1)->setEnabled(false);
+    }
 }
 
 } // namespace
@@ -94,26 +142,7 @@ SettingsPage::SettingsPage(AppSettings &settings, QWidget *parent)
     langCard->setObjectName("cardLang");
     root->addWidget(langCard);
 
-    QVBoxLayout *themeBody = nullptr;
-    auto *themeCard = makeCard(inner, tr("TEMA"), tr("Aparência do launcher"),
-                               tr("Troca o visual na hora. Classic Things usa cantos retos."),
-                               &themeBody);
-    m_themeCombo = new Ui::ComboBox(themeCard);
-    m_themeCombo->setMinimumHeight(36);
-    for (const QString &key : Theme::names())
-        m_themeCombo->addItem(Theme::displayName(key), key);
-    const int thi = m_themeCombo->findData(Theme::normalizeKey(m_settings.theme));
-    m_themeCombo->setCurrentIndex(thi >= 0 ? thi : 0);
-    themeBody->addWidget(m_themeCombo);
-    connect(m_themeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
-        const QString key = m_themeCombo->currentData().toString();
-        if (key.isEmpty())
-            return;
-        m_settings.theme = key;
-        Theme::apply(key);
-    });
-    themeCard->setObjectName("cardTheme");
-    root->addWidget(themeCard);
+    root->addWidget(buildAppearanceCard(inner));
 
     QVBoxLayout *homeBody = nullptr;
     auto *homeCard = makeCard(inner, tr("INÍCIO"), tr("Página inicial"),
@@ -244,6 +273,236 @@ SettingsPage::SettingsPage(AppSettings &settings, QWidget *parent)
     outer->addWidget(scroll);
 }
 
+// Theme, accent, window material and title bar. Every control writes
+// m_settings and emits lookChanged(); MainWindow applies the result, so
+// Cancel and the live preview share one path.
+QFrame *SettingsPage::buildAppearanceCard(QWidget *parent)
+{
+    QVBoxLayout *body = nullptr;
+    QFrame *card = makeCard(parent, tr("TEMA"), tr("Aparência do launcher"),
+                            tr("Theme, accent colour, window material and title bar."), &body);
+    card->setObjectName("cardTheme");
+
+    auto label = [&](const char *text) {
+        auto *l = new QLabel(tr(text), card);
+        l->setObjectName("FieldLabel");
+        l->setProperty("trText", QByteArray(text));
+        body->addSpacing(6);
+        body->addWidget(l);
+    };
+
+    label(QT_TR_NOOP("Theme"));
+    m_themeCombo = new Ui::ComboBox(card);
+    m_themeCombo->setMinimumHeight(36);
+    for (const QString &key : Theme::names())
+        m_themeCombo->addItem(Theme::displayName(key), key);
+    const int thi = m_themeCombo->findData(Theme::normalizeKey(m_settings.theme));
+    m_themeCombo->setCurrentIndex(thi >= 0 ? thi : 0);
+    body->addWidget(m_themeCombo);
+    connect(m_themeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        const QString key = m_themeCombo->currentData().toString();
+        if (key.isEmpty())
+            return;
+        m_settings.theme = key;
+        emit lookChanged();
+    });
+
+    label(QT_TR_NOOP("Accent colour"));
+    auto *swatches = new QHBoxLayout();
+    swatches->setSpacing(6);
+    for (const Theme::Swatch &sw : Theme::swatches()) {
+        auto *b = new QPushButton(card);
+        b->setObjectName("AccentSwatch");
+        b->setCheckable(true);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setFixedSize(26, 26);
+        b->setToolTip(QString::fromLatin1(sw.name));
+        b->setProperty("accent", QString::fromLatin1(sw.hex));
+        b->setStyleSheet(QStringLiteral("QPushButton#AccentSwatch { background-color: %1; }")
+                             .arg(QLatin1String(sw.hex)));
+        swatches->addWidget(b);
+        m_accentButtons << b;
+    }
+    swatches->addStretch();
+    body->addLayout(swatches);
+
+    auto *accentRow = new QHBoxLayout();
+    accentRow->setSpacing(8);
+    auto choice = [&](const char *text, const QString &spec) {
+        auto *b = new QPushButton(tr(text), card);
+        b->setObjectName("AccentChoice");
+        b->setCheckable(true);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setProperty("accent", spec);
+        b->setProperty("trText", QByteArray(text));
+        accentRow->addWidget(b);
+        m_accentButtons << b;
+    };
+    choice(QT_TR_NOOP("Theme colour"), QString());
+    if (Theme::systemAccent().isValid())
+        choice(QT_TR_NOOP("Windows accent"), QStringLiteral("system"));
+    m_accentHex = new QLineEdit(card);
+    m_accentHex->setMaxLength(7);
+    m_accentHex->setFixedWidth(100);
+    m_accentHex->setMinimumHeight(34);
+    m_accentHex->setPlaceholderText(QStringLiteral("#8aadf4"));
+    m_accentHex->setToolTip(tr("Type any colour as #rrggbb."));
+    accentRow->addWidget(m_accentHex);
+    auto *pick = new QPushButton(tr("Pick a colour"), card);
+    pick->setProperty("trText", QByteArray(QT_TR_NOOP("Pick a colour")));
+    pick->setCursor(Qt::PointingHandCursor);
+    accentRow->addWidget(pick);
+    accentRow->addStretch();
+    body->addLayout(accentRow);
+
+    for (QPushButton *b : std::as_const(m_accentButtons))
+        connect(b, &QPushButton::clicked, this, [this, b]() { setAccentSpec(b->property("accent").toString()); });
+    connect(m_accentHex, &QLineEdit::editingFinished, this, [this]() {
+        const QString spec = Theme::normalizeAccent(m_accentHex->text());
+        if (spec.startsWith(QLatin1Char('#')))
+            setAccentSpec(spec);
+        else
+            syncAppearance(); // not a colour: put the current one back
+    });
+    connect(pick, &QPushButton::clicked, this, [this]() {
+        const QColor c = QColorDialog::getColor(Theme::color("ACCENT"), this, tr("Accent colour"));
+        if (c.isValid())
+            setAccentSpec(c.name());
+    });
+
+    label(QT_TR_NOOP("Window material"));
+    m_materialCombo = new Ui::ComboBox(card);
+    m_materialCombo->setMinimumHeight(36);
+    fillMaterials(m_materialCombo);
+    body->addWidget(m_materialCombo);
+    m_materialDesc = new QLabel(card);
+    m_materialDesc->setObjectName("MutedHint");
+    m_materialDesc->setWordWrap(true);
+    body->addWidget(m_materialDesc);
+    connect(m_materialCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        const QString key = m_materialCombo->currentData().toString();
+        if (key.isEmpty())
+            return;
+        m_settings.material = key;
+        emit lookChanged();
+    });
+
+    label(QT_TR_NOOP("Tint"));
+    auto *tintRow = new QHBoxLayout();
+    tintRow->setSpacing(10);
+    m_tint = new QSlider(Qt::Horizontal, card);
+    m_tint->setRange(0, 100);
+    m_tint->setPageStep(10);
+    m_tint->setToolTip(tr("How much theme colour sits over the material. Lower shows more of the desktop."));
+    m_tintValue = new QLabel(card);
+    m_tintValue->setMinimumWidth(40);
+    tintRow->addWidget(m_tint, 1);
+    tintRow->addWidget(m_tintValue);
+    body->addLayout(tintRow);
+    // A whole stylesheet pass per pixel of drag is too slow: apply on release.
+    connect(m_tint, &QSlider::valueChanged, this, [this](int v) {
+        m_settings.materialTint = v;
+        m_tintValue->setText(QStringLiteral("%1%").arg(v));
+        if (!m_tint->isSliderDown())
+            emit lookChanged();
+    });
+    connect(m_tint, &QSlider::sliderReleased, this, &SettingsPage::lookChanged);
+
+    label(QT_TR_NOOP("Title bar"));
+    auto *titleRow = new QHBoxLayout();
+    titleRow->setSpacing(4);
+    m_titleWindows = new Ui::RadioButton(tr("Windows"), card);
+    m_titleBlutac = new Ui::RadioButton(tr("Blutac"), card);
+    m_titleBlutac->setToolTip(tr("Blutac draws its own minimise, maximise and close buttons, "
+                                 "so the material runs right to the top edge."));
+    m_titleBlutac->setEnabled(WindowChrome::supportsCustomTitleBar());
+    auto *titleGroup = new QButtonGroup(card);
+    titleGroup->addButton(m_titleWindows);
+    titleGroup->addButton(m_titleBlutac);
+    titleRow->addWidget(m_titleWindows);
+    titleRow->addWidget(m_titleBlutac);
+    titleRow->addStretch();
+    body->addLayout(titleRow);
+    connect(m_titleBlutac, &QRadioButton::toggled, this, [this](bool on) {
+        m_settings.customTitleBar = on;
+        emit lookChanged();
+    });
+
+    m_lookHint = new QLabel(card);
+    m_lookHint->setObjectName("MutedHint");
+    m_lookHint->setWordWrap(true);
+    body->addWidget(m_lookHint);
+
+    m_restartRow = new QWidget(card);
+    m_restartRow->setObjectName("LookRow");
+    auto *restart = new QHBoxLayout(m_restartRow);
+    restart->setContentsMargins(0, 6, 0, 0);
+    auto *restartText = new QLabel(tr("Blutac needs a restart for this one."), m_restartRow);
+    restartText->setProperty("trText", QByteArray(QT_TR_NOOP("Blutac needs a restart for this one.")));
+    auto *restartBtn = new QPushButton(tr("Restart now"), m_restartRow);
+    restartBtn->setProperty("trText", QByteArray(QT_TR_NOOP("Restart now")));
+    restartBtn->setProperty("cssClass", "primary");
+    restartBtn->setCursor(Qt::PointingHandCursor);
+    restart->addWidget(restartText, 1);
+    restart->addWidget(restartBtn);
+    body->addWidget(m_restartRow);
+    connect(restartBtn, &QPushButton::clicked, this, &SettingsPage::restartRequested);
+
+    // The accent field and swatches show what the theme actually applied.
+    connect(&ThemeHub::instance(), &ThemeHub::themeChanged, this, &SettingsPage::syncAppearance);
+    syncAppearance();
+    return card;
+}
+
+void SettingsPage::setAccentSpec(const QString &spec)
+{
+    m_settings.accent = spec;
+    emit lookChanged();
+}
+
+void SettingsPage::setRestartNeeded(bool needed)
+{
+    m_restartNeeded = needed;
+    syncAppearance();
+}
+
+void SettingsPage::syncAppearance()
+{
+    if (!m_materialCombo)
+        return;
+    const QString spec = Theme::normalizeAccent(m_settings.accent);
+    for (QPushButton *b : std::as_const(m_accentButtons))
+        b->setChecked(b->property("accent").toString() == spec);
+    m_accentHex->setText(Theme::color("ACCENT").name());
+
+    const Theme::Material m = Theme::materialFromKey(m_settings.material);
+    const int mi = m_materialCombo->findData(Theme::materialKey(m));
+    m_materialCombo->blockSignals(true);
+    m_materialCombo->setCurrentIndex(mi >= 0 ? mi : 0);
+    m_materialCombo->blockSignals(false);
+    m_materialDesc->setText(materialBlurb(m));
+
+    m_tint->blockSignals(true);
+    m_tint->setValue(m_settings.materialTint);
+    m_tint->blockSignals(false);
+    m_tint->setEnabled(m != Theme::Material::Solid);
+    m_tintValue->setText(QStringLiteral("%1%").arg(m_settings.materialTint));
+
+    const bool blutac = m_settings.customTitleBar && WindowChrome::supportsCustomTitleBar();
+    for (QRadioButton *r : {m_titleWindows, m_titleBlutac})
+        r->blockSignals(true);
+    (blutac ? m_titleBlutac : m_titleWindows)->setChecked(true);
+    for (QRadioButton *r : {m_titleWindows, m_titleBlutac})
+        r->blockSignals(false);
+
+    // Blur behind does not reach the Windows caption; Mica and Acrylic do.
+    const bool blurWithCaption = !blutac
+        && (m == Theme::Material::Blur || m == Theme::Material::Frosted);
+    m_lookHint->setText(tr("Blur and Frosted glass look best with the Blutac title bar."));
+    m_lookHint->setVisible(blurWithCaption);
+    m_restartRow->setVisible(m_restartNeeded);
+}
+
 QLineEdit *SettingsPage::folderRow(QVBoxLayout *layout, const QString &label,
                                    QString AppSettings::*field)
 {
@@ -312,6 +571,7 @@ void SettingsPage::pullFromSettings()
         m_themeCombo->setCurrentIndex(i >= 0 ? i : 0);
         m_themeCombo->blockSignals(false);
     }
+    syncAppearance();
     if (m_homeEnabled) {
         m_homeEnabled->blockSignals(true);
         m_homeEnabled->setChecked(m_settings.homeEnabled);
@@ -341,7 +601,7 @@ void SettingsPage::cancelEdit()
 {
     m_settings = m_snapshot;
     I18n::apply(m_settings.language);
-    Theme::apply(m_settings.theme);
+    emit lookChanged();
     pullFromSettings();
     emit homeEnabledChanged(m_settings.homeEnabled);
     emit plutoniumFolderChanged();
@@ -361,8 +621,29 @@ void SettingsPage::retranslate()
     fill(findChild<QFrame*>("cardProfile"), tr("PERFIL"), tr("Seu nickname"), QString());
     fill(findChild<QFrame*>("cardLang"), tr("IDIOMA"), tr("Idioma do programa"),
          tr("Vale para o setup e para o launcher."));
-    fill(findChild<QFrame*>("cardTheme"), tr("TEMA"), tr("Aparência do launcher"),
-         tr("Troca o visual na hora. Classic Things usa cantos retos."));
+    if (auto *card = findChild<QFrame*>("cardTheme")) {
+        fill(card, tr("TEMA"), tr("Aparência do launcher"),
+             tr("Theme, accent colour, window material and title bar."));
+        for (QWidget *w : card->findChildren<QWidget *>()) {
+            const QByteArray key = w->property("trText").toByteArray();
+            if (key.isEmpty())
+                continue;
+            if (auto *l = qobject_cast<QLabel *>(w))
+                l->setText(tr(key.constData()));
+            else if (auto *b = qobject_cast<QPushButton *>(w))
+                b->setText(tr(key.constData()));
+        }
+    }
+    if (m_titleWindows)
+        m_titleWindows->setText(tr("Windows"));
+    if (m_titleBlutac)
+        m_titleBlutac->setText(tr("Blutac"));
+    if (m_materialCombo) {
+        m_materialCombo->blockSignals(true);
+        fillMaterials(m_materialCombo);
+        m_materialCombo->blockSignals(false);
+        syncAppearance();
+    }
     fill(findChild<QFrame*>("cardHome"), tr("INÍCIO"), tr("Página inicial"),
          tr("Desative para esconder o catálogo da barra lateral."));
     if (m_homeEnabled)

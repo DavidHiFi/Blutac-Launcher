@@ -30,6 +30,11 @@ Var PackageTest
 Var PackageTestDir
 
 Name "Blutac Launcher"
+!define EXE "BlutacLauncher.exe"
+; 2.3.0 and older shipped this name. Setup removes it, and the probes
+; below check it, so installing over an old copy leaves one exe behind.
+; The uninstall key keeps the old name: Windows only shows DisplayName.
+!define OLD_EXE "QualityOfLifeModManager.exe"
 OutFile "${OUTFILE}"
 InstallDir "$LOCALAPPDATA\Programs\Blutac Launcher"
 InstallDirRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "InstallLocation"
@@ -48,7 +53,7 @@ VIAddVersionKey "LegalCopyright" "Licensed under the GNU Lesser General Public L
 VIAddVersionKey "FileDescription" "Blutac Launcher Setup"
 
 !define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN "$INSTDIR\QualityOfLifeModManager.exe"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Run Blutac Launcher now"
 !define MUI_LICENSEPAGE_TEXT_TOP "This app is free software under the GNU Lesser General Public License v3. The installer carries its whole runtime, so no extra downloads are needed."
 !define MUI_LICENSEPAGE_BUTTON "Install"
@@ -84,19 +89,24 @@ FunctionEnd
 
 ; If a previous copy is installed, its exe may be running and locked.
 ; Delete fails on a locked (or missing) file, so probe it first.
-Function CloseRunningApp
-  retry:
-  ${If} ${FileExists} "$INSTDIR\QualityOfLifeModManager.exe"
+!macro ProbeLocked FILE WHAT
+  ${If} ${FileExists} "$INSTDIR\${FILE}"
     ClearErrors
     Delete "$INSTDIR\uninstall.probe"
-    Rename "$INSTDIR\QualityOfLifeModManager.exe" "$INSTDIR\uninstall.probe"
+    Rename "$INSTDIR\${FILE}" "$INSTDIR\uninstall.probe"
     ${If} ${Errors}
       MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Blutac Launcher is still running.$\nClose it (check the system tray), then press Retry." IDRETRY retry
-      Abort "Install cancelled while the app was running."
+      Abort "${WHAT} cancelled while the app was running."
     ${Else}
-      Rename "$INSTDIR\uninstall.probe" "$INSTDIR\QualityOfLifeModManager.exe"
+      Rename "$INSTDIR\uninstall.probe" "$INSTDIR\${FILE}"
     ${EndIf}
   ${EndIf}
+!macroend
+
+Function CloseRunningApp
+  retry:
+  !insertmacro ProbeLocked "${EXE}" "Install"
+  !insertmacro ProbeLocked "${OLD_EXE}" "Install"
 FunctionEnd
 
 Section "Install"
@@ -114,7 +124,8 @@ Section "Install"
     IfFileExists "$INSTDIR\${REL}" +2
       Abort "Install failed: ${REL} did not land in $INSTDIR. Re-run this Setup; if it repeats, re-download it."
   !macroend
-  !insertmacro CheckFile "QualityOfLifeModManager.exe"
+  !insertmacro CheckFile "${EXE}"
+  Delete "$INSTDIR\${OLD_EXE}"
   !insertmacro CheckFile "Qt6Core.dll"
   !insertmacro CheckFile "Qt6Gui.dll"
   !insertmacro CheckFile "Qt6Widgets.dll"
@@ -135,7 +146,7 @@ Section "Install"
   ; plugin, Schannel TLS, and the Direct3D system libraries. Suppress Windows'
   ; own loader popups and replace a possible cascade with one installer error.
   System::Call 'kernel32::SetErrorMode(i 0x8003)i .r2'
-  nsExec::ExecToStack /TIMEOUT=30000 '"$INSTDIR\QualityOfLifeModManager.exe" -installcheck'
+  nsExec::ExecToStack /TIMEOUT=30000 '"$INSTDIR\${EXE}" -installcheck'
   Pop $0
   Pop $1
   System::Call 'kernel32::SetErrorMode(i r2)i .r3'
@@ -160,9 +171,9 @@ Section "Install"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "DisplayName" "Blutac Launcher"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "Publisher" "DavidHiFi"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "DisplayIcon" "$INSTDIR\QualityOfLifeModManager.exe"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "DisplayIcon" "$INSTDIR\${EXE}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "URLInfoAbout" "https://github.com/DavidHiFi/QualityOfLifeModManager"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "URLInfoAbout" "https://github.com/DavidHiFi/Blutac-Launcher"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "UninstallString" "$INSTDIR\Uninstall.exe"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\QualityOfLifeModManager" "NoRepair" 1
@@ -175,16 +186,17 @@ Section "Install"
   Delete "$DESKTOP\Quality of Life Mod Manager.lnk"
 
   CreateDirectory "$SMPROGRAMS\Blutac Launcher"
-  CreateShortCut "$SMPROGRAMS\Blutac Launcher\Blutac Launcher.lnk" "$INSTDIR\QualityOfLifeModManager.exe" "" "$INSTDIR\QualityOfLifeModManager.exe" 0
+  CreateShortCut "$SMPROGRAMS\Blutac Launcher\Blutac Launcher.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\${EXE}" 0
   CreateShortCut "$SMPROGRAMS\Blutac Launcher\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
-  CreateShortCut "$DESKTOP\Blutac Launcher.lnk" "$INSTDIR\QualityOfLifeModManager.exe" "" "$INSTDIR\QualityOfLifeModManager.exe" 0
+  CreateShortCut "$DESKTOP\Blutac Launcher.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\${EXE}" 0
   install_done:
 SectionEnd
 
 Section "Uninstall"
   Call un.CloseRunningApp
 
-  Delete "$INSTDIR\QualityOfLifeModManager.exe"
+  Delete "$INSTDIR\${EXE}"
+  Delete "$INSTDIR\${OLD_EXE}"
   Delete "$INSTDIR\Qt6Core.dll"
   Delete "$INSTDIR\Qt6Gui.dll"
   Delete "$INSTDIR\Qt6Widgets.dll"
@@ -218,15 +230,6 @@ SectionEnd
 
 Function un.CloseRunningApp
   retry:
-  ${If} ${FileExists} "$INSTDIR\QualityOfLifeModManager.exe"
-    ClearErrors
-    Delete "$INSTDIR\uninstall.probe"
-    Rename "$INSTDIR\QualityOfLifeModManager.exe" "$INSTDIR\uninstall.probe"
-    ${If} ${Errors}
-      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Blutac Launcher is still running.$\nClose it (check the system tray), then press Retry." IDRETRY retry
-      Abort "Uninstall cancelled while the app was running."
-    ${Else}
-      Rename "$INSTDIR\uninstall.probe" "$INSTDIR\QualityOfLifeModManager.exe"
-    ${EndIf}
-  ${EndIf}
+  !insertmacro ProbeLocked "${EXE}" "Uninstall"
+  !insertmacro ProbeLocked "${OLD_EXE}" "Uninstall"
 FunctionEnd

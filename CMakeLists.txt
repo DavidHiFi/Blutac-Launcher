@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(QualityOfLifeModManager LANGUAGES CXX)
+project(BlutacLauncher LANGUAGES CXX)
 # App version lives in src/Version.h (CLL_VERSION).
 
 set(CMAKE_CXX_STANDARD 17)
@@ -24,6 +24,7 @@ set(SOURCES
     src/Downloader.cpp
     src/Dialogs.cpp
     src/Theme.cpp
+    src/WindowChrome.cpp
     src/I18n.cpp
     src/ImportKitDialog.cpp
     src/MakeConfigDialog.cpp
@@ -64,6 +65,7 @@ set(HEADERS
     src/Downloader.h
     src/Dialogs.h
     src/Theme.h
+    src/WindowChrome.h
     src/I18n.h
     src/ImportKitDialog.h
     src/MakeConfigDialog.h
@@ -109,7 +111,7 @@ if (TARGET Qt${QT_VERSION_MAJOR}::Svg)
     target_link_libraries(LanLauncherQt PRIVATE Qt${QT_VERSION_MAJOR}::Svg)
 endif()
 
-set_target_properties(LanLauncherQt PROPERTIES OUTPUT_NAME "QualityOfLifeModManager")
+set_target_properties(LanLauncherQt PROPERTIES OUTPUT_NAME "BlutacLauncher")
 
 if (WIN32)
     set_target_properties(LanLauncherQt PROPERTIES WIN32_EXECUTABLE TRUE)
@@ -138,7 +140,8 @@ endif()
 
 if (WIN32)
     # crypt32: DPAPI, for the saved Plutonium account token (PlutoniumAuth).
-    target_link_libraries(LanLauncherQt PRIVATE crypt32)
+    # dwmapi: window materials and title bar colours (WindowChrome).
+    target_link_libraries(LanLauncherQt PRIVATE crypt32 dwmapi)
 endif()
 
 if (MINGW)
