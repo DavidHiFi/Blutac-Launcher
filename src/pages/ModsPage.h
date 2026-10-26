@@ -45,10 +45,15 @@ private:
     void handleModFile(const QString &path);
     bool tryCllInstall(const QString &path);
     void tryGithubInstall(const QString &url);
-    void showView(int index);   // 0 = mods, 1 = scripts
+    enum View { ViewMods, ViewScripts, ViewTextures, ViewSounds, ViewPlutonium, ViewCount };
+    void showView(int index);
+    void syncViews();
     void applyViewText();
     void refreshScripts();
     void onDeleteScript();
+    void refreshPacks();
+    void onDeletePack();
+    QString packType() const;   // "texture", "sound" or "plutonium" for the pack views
     void importScript(const QString &path);
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
@@ -62,7 +67,9 @@ private:
     QLabel *m_titleLabel = nullptr;
     QListWidget *m_modList = nullptr;
     QListWidget *m_scriptList = nullptr;
+    QListWidget *m_packList = nullptr;   // texture packs, sound packs or Plutonium add-ons
     QStackedWidget *m_listStack = nullptr;
+    int m_view = ViewMods;
     QList<QPushButton *> m_viewButtons;
     QLabel *m_listTitle = nullptr;
     QLabel *m_listHint = nullptr;

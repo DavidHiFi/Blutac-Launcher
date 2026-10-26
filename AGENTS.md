@@ -19,7 +19,10 @@ release line (2.16.x); this app is 2.0.x. Do not compare the two.
 src/                 app code (upstream layout kept so upstream merges stay possible)
 src/Version.h        version and every brand string, URL and feed address
 src/QolService.*     the series: mod state, packs, controller icons, ReShade install
-src/pages/QolPage.*  the "Game Configuration" sidebar page
+src/WorkshopItems.*  packs, Plutonium add-ons and QoL mods: install, list, remove
+src/pages/HomePage.* the Workshop: browse by game, search, install
+src/pages/ModsPage.* the Mods tab: mods, scripts, texture and sound packs, Plutonium
+src/pages/BackupsPage.* the Backups page, one section per game with a game filter
 src/GameLauncher.*   LAN and online launch (both the bootstrapper), ReShade watchdog
 src/PlutoniumAuth.*  Plutonium account: saved token, validate, mint a session token
 src/VersionCompare.h the one rule for "is there an update", shared by both callers
@@ -146,11 +149,15 @@ running rather than failing on a locked DLL, and re-checks the result before
 reporting success.
 
 **Backups are the player's files, kept where the script kept them.**
-`src/QolBackups.*` writes `storage\t6\backups\<kind>\<part>\`, the layout
-qol-installer.ps1 and the 1.x app used, so a backup taken by either restores
-here. Kinds: images, zone, controller, reshade, mod, scripts (both `scripts\`
-and `raw\`), settings, mods (other mods and `usermaps`, never automatic).
-Rules that matter:
+`src/QolBackups.*` writes Black Ops II's and ReShade's backups to
+`storage\t6\backups\<kind>\<part>\`, the layout qol-installer.ps1 and the 1.x
+app used, so a backup taken by either restores here. Black Ops II kinds: images,
+zone, controller, scripts (both `scripts\` and `raw\`), settings, mod, mods
+(other mods and `usermaps`, never automatic); ReShade is the `reshade` kind
+under the "plutonium" game. Black Ops, World at War and Modern Warfare 3 kinds
+are `<game>/<kind>` and live in `storage\<game>\backups\<kind>\`.
+`QolBackups::games()` and `kinds(game)` drive the Backups page; a new kind shows
+up there by itself. Rules that matter:
 
 * Every install calls `backupFirst` before it writes. Each kind keeps its
   **oldest** copy unless replaced by hand; the oldest is the one from before
@@ -209,6 +216,12 @@ file against the archive's own `payload.json`. It unpacks with Windows' `tar.exe
   --version X.Y.Z`. Upload the zip, then `--clobber` the manifest last. Every file is
   pinned; a donor file that has drifted stops the build.
 
+**The Workshop and the Mods tab share one idea of "installed".** Packs, the
+Plutonium add-ons and the QoL mods go through `WorkshopItems` from both pages.
+A page that reads the `installed-*.txt` manifests or `bin\dxgi.dll` itself will
+drift from the other page; add the case to `WorkshopItems` instead. Packs exist
+for t4, t5 and t6 only; the Mods tab hides the pack lists for IW5.
+
 **Page indices.** `MainWindow::ToolIndex` must match the `m_stack->addWidget` order,
 and sidebar tool buttons map with `kFirstTool`. Insert new pages in both places.
 
@@ -245,7 +258,10 @@ the desktop. Set `QT_QPA_FONTDIR=C:\Windows\Fonts` too, or every letter renders
 as a box. Run it from a copy of `dist` whose INI has `setup completed=true`, or
 the setup wizard blocks the shot. `QOL_HOME_FEED=<file>` loads a local
 `qol_home.json` in place of the GitHub copy, to check catalog changes before
-they are pushed.
+they are pushed. The app uses whichever catalog has the later `updated` date,
+the downloaded one or the copy built into the exe (a tie goes to the download).
+Bump `updated` with every catalog edit, or an older download or cache hides
+items a newer exe ships with.
 
 To prove a real online launch without touching the GUI:
 

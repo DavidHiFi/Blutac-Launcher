@@ -356,7 +356,7 @@ void PlayPage::updateLaunchOptions()
     else
         hint = tr("No login needed. No mod selected; pick one on the Mods page to load it automatically.");
     if (m_settings.launchReShade && !reshadeReady)
-        hint += QStringLiteral("  ") + tr("ReShade is not installed yet: see the Game Configuration page.");
+        hint += QStringLiteral("  ") + tr("ReShade is not installed yet. Get it from the Workshop under Plutonium.");
     else if (m_settings.launchReShade && !online && code == QLatin1String("t6")
              && m_settings.launchDlss5 && QolService::dlssPayloadReady(m_settings))
         hint += QStringLiteral("  ") + tr("ReShade runs with full add-on support and DLSS 5 (F10 for its panel).");

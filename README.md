@@ -26,7 +26,7 @@ One window for the [Quality of Life series](https://github.com/DavidHiFi/Plutoni
 
 1. Download the **Setup** `.exe` from the [latest release](https://github.com/DavidHiFi/Blutac-Launcher/releases/latest) and run it. It installs for your user only, needs no admin rights, and adds Start menu and desktop shortcuts.
 2. Run the app. The first-run wizard asks for your name, a theme, your Plutonium folder and your game folders.
-3. Open **Game Configuration** in the sidebar and press **Install** on Black Ops II.
+3. Open the **Workshop**, pick **Black Ops II** and press **Install** on Quality of Life.
 4. Open **Black Ops II**, pick **LAN** or **Online**, and press **Start**.
 
 Prefer no installer? Unzip the **portable** `.zip` anywhere you can write to and run the exe inside it. The `.update.bin` file on the release page is for the app's own updater. Do not run it.
@@ -35,34 +35,36 @@ Prefer no installer? Unzip the **portable** `.zip` anywhere you can write to and
 
 ### Workshop
 
-- **One catalog:** mods, custom maps and GSC scripts for every Plutonium game, with cover art.
-- **Filters:** pick any mix of games, mods only or scripts only, and the mods a script was made for, such as Quality of Life or Zombies Declassified.
-- **One-click scripts:** Install drops a script into the folder Plutonium loads it from. Remove sends it to the Recycle Bin.
+- **Browse by game:** pick a game at the top, or All games, and its mods, maps, scripts and packs sit in rows. Each row has a See all button.
+- **Search and sort:** search by name or author, show one kind of item, and sort by recommended, name or installed first.
+- **Quality of Life mods:** install or update each game's Quality of Life mod.
+- **Texture and sound packs** for Black Ops II, Black Ops and World at War. Texture packs go in the game's `images` folder and sound packs in its `zone` folder, so they load with every mod. Black Ops II has HD textures, custom sounds and PlayStation 5, Switch or Xbox button prompts.
+- **Plutonium add-ons:** ReShade for every Plutonium game, and DLSS 5 for Black Ops II LAN games.
+- **One-click scripts:** Install drops a script into the folder Plutonium loads it from.
 - **Your own scripts:** Add a script copies a `.gsc` from your PC into the right folder for the game and mode you pick.
 - **Share a script:** opens a short form on GitHub. Accepted scripts appear in everyone's Workshop.
 - **Starter scripts:** a health readout for World at War, Black Ops and Black Ops II in Zombies and Multiplayer, and a zombies-left counter for each Zombies mode.
 
-### Quality of Life series
+### Mods
 
-- **One-click mods:** install, update or remove each game's Quality of Life mod.
-- **Black Ops II extras:** HD texture pack, custom sounds and PlayStation 5, Switch or Xbox button prompts.
-- **Backups:** every install first copies your own textures, sounds, icons, ReShade setup, scripts and settings.
-- **Put it back:** restore any backup from the Game Configuration page, or remove a pack and get your originals back.
+- **Everything you installed, per game:** Mods, Scripts, Texture packs, Sound packs and Plutonium, each with its own list. Remove anything from here, the Quality of Life mod included.
+- **Drop to install:** drop a `.zip`, `.rar`, `.7z`, `.exe`, `.cll` or `.gsc` file, or paste a GitHub link.
+- **Safe uninstall:** every mod install saves a checkpoint, so removing it restores what it replaced. Removing a pack offers to put your own files back.
+
+### Backups
+
+- **Your files, per game:** textures, sounds, button prompts, scripts, settings and your ReShade setup. Filter by game, then back up or put back one kind or everything at once.
+- **Before every install:** with the box ticked, an install first copies the files it would replace. Each kind keeps its oldest copy until you replace it.
 
 ### Playing
 
 - **Play page:** one page per game with its art, a LAN or Online choice and a Start button.
 - **LAN:** starts the game with the selected mod already loaded.
 - **Online:** signs in with your Plutonium account and starts the game without opening Plutonium's launcher.
-- **ReShade:** colour grading for every Plutonium game, kept in place while you play.
-- **DLSS 5:** an optional switch for Black Ops II LAN games, once you import it from a folder that already has it.
+- **ReShade:** colour grading for every Plutonium game, kept in place while you play. Install it from the Workshop.
+- **DLSS 5:** an optional switch for Black Ops II LAN games. Install it from the Workshop.
 - **Black Ops III client:** pick the LAN Launcher client or the BOIII Community client, with your own launch options for each.
 - **T7 Patch:** install, update or remove the Black Ops III security patch, and set its player name, network password and friends-only switch. It can also install the Mod Check Bypass plugin from its zip.
-
-### Mods and servers
-
-- **Mods page:** switch between installed mods and installed scripts. Drop a `.zip`, `.rar`, `.7z`, `.exe`, `.cll` or `.gsc` file, or paste a GitHub link.
-- **Safe uninstall:** every mod install saves a checkpoint, so removing it restores what it replaced.
 - **LAN server:** start and stop a dedicated server with generated configs.
 
 ### The app
@@ -88,10 +90,10 @@ Prefer no installer? Unzip the **portable** `.zip` anywhere you can write to and
 ## Notes
 
 > [!NOTE]
-> **The Workshop, scripts, T7 Patch, accent colour, window materials and title bar switch are new in the next release.** Version 2.3.0 has the older Home page. Build from source to try them now.
+> **The Workshop, the Mods lists, the Backups page, T7 Patch, accent colour, window materials and title bar switch are new in the next release.** Version 2.3.0 has the older Home and Game Configuration pages. Build from source to try them now.
 
 > [!IMPORTANT]
-> **Plutonium deletes ReShade every time it starts.** Tick **ReShade** on the Play page, install it once, and a quiet watcher puts the files back as the game opens, then saves your in-game preset edits.
+> **Plutonium deletes ReShade every time it starts.** Install ReShade once from the Workshop and tick it on the Play page. A quiet watcher puts the files back as the game opens, then saves your in-game preset edits.
 
 > [!NOTE]
 > **Mods load on LAN only.** Online games start without a mod. Pick one from the game's own Mods menu once you are in.

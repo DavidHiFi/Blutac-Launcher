@@ -177,7 +177,7 @@ int runNoGui(AppSettings &settings, const QCommandLineParser &parser)
 }
 
 // The scripted click-through behind QOL_UITEST. It presses real buttons on
-// the Quality of Life page and answers each question box from a queue, so the
+// the Backups page and answers each question box from a queue, so the
 // page's own wiring is what gets tested, not a copy of it.
 void runUiTest(MainWindow &window, const QString &logPath)
 {
@@ -428,7 +428,7 @@ int main(int argc, char *argv[])
         }
         for (const UpdateService::Pending &p : UpdateService::detect(cat, settings))
             out << "PENDING " << p.title << " -> " << p.remote.version << Qt::endl;
-        // The Quality of Life page asks its own question, through a different
+        // The Workshop checks the QoL mods on its own, through a different
         // path; show that too so both are visible in one run.
         for (const QolService::SeriesMod &m : QolService::series()) {
             if (!m.released)
@@ -634,7 +634,10 @@ int main(int argc, char *argv[])
             put(QolService::stateDir(b) + "/installed-images.txt", "ours.iwi\n");
             put(b.plutoniumInstance + "/bin/Mine.ini", "preset");
             QString e;
-            check("backup: before install", QolBackups::backupBeforeInstall(b, {"images"}, QolBackups::automaticKinds(), {}, e), e);
+            check("backup: before install",
+                  QolBackups::backupBeforeInstall(b, {"images"},
+                                                  QolBackups::automaticKinds() + QolBackups::automaticKinds("plutonium"), {}, e),
+                  e);
             const QString bk = QolBackups::root(b);
             check("backup: images taken", QFileInfo::exists(bk + "/images/images/mine.iwi"));
             check("backup: our own pack files left out", !QFileInfo::exists(bk + "/images/images/ours.iwi"));
@@ -663,6 +666,16 @@ int main(int argc, char *argv[])
                   !read(QolService::stateDir(b) + "/installed-images.txt").contains("mine.iwi"));
             check("restore: scripts", QolBackups::restore(b, "scripts", {}, e)
                       && QFileInfo::exists(t6 + "/scripts/zm/mine.gsc"), e);
+
+            // Removing one pack puts back only what that pack replaced, not
+            // another pack's files.
+            put(t6 + "/images/mine.iwi", "pack a");
+            put(t6 + "/images/xenonbutton_a.iwi", "pack b");
+            check("restore: only the removed pack's files",
+                  QFileInfo::exists(bk + "/images/images/xenonbutton_a.iwi")
+                      && QolBackups::restore(b, "images", {}, e, {"mine.iwi"})
+                      && read(t6 + "/images/mine.iwi") == "mine"
+                      && read(t6 + "/images/xenonbutton_a.iwi") == "pack b", e);
 
             // A ReShade backup from 2.0-2.2 is flat in backups\reshade.
             QolBackups::remove(b, "reshade", e);
@@ -956,6 +969,8 @@ int main(int argc, char *argv[])
         QTimer::singleShot(100, &window, [&window, pageIndex, gameIndex]() {
             if (qEnvironmentVariableIsSet("QOL_GAME"))
                 window.debugSelectGame(gameIndex);
+            else if (qEnvironmentVariableIsSet("QOL_WORKSHOP_GAME"))
+                window.debugWorkshopGame(qEnvironmentVariable("QOL_WORKSHOP_GAME"));
             else
                 window.debugShowPage(pageIndex);
         });

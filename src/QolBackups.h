@@ -6,13 +6,15 @@
 
 class AppSettings;
 
-// Backups of the player's own files: textures, sounds, controller icons,
-// ReShade, the mod and its settings, loose scripts, and game settings.
+// Backups of the player's own files, per game: textures, sounds, scripts,
+// settings and mods for each Plutonium game, plus Plutonium's own ReShade
+// setup.
 //
-// They live in plain sight at storage\t6\backups\<kind>\, one folder per
-// kind, in exactly the layout qol-installer.ps1 and the 1.x app used, so a
-// backup taken by either of those is found and restored here. They are the
-// player's files, so they must stay findable and copyable by hand.
+// They live in plain sight at storage\<game>\backups\<kind>\, one folder
+// per kind. Black Ops II's layout is exactly the one qol-installer.ps1 and the
+// 1.x app used, so a backup taken by either of those is found and restored
+// here. They are the player's files, so they must stay findable and copyable
+// by hand.
 //
 // A backup keeps the OLDER copy unless it is replaced on purpose. The older
 // one is the one taken before this app first wrote anything, and that is the
@@ -21,11 +23,12 @@ class AppSettings;
 namespace QolBackups
 {
     struct Info {
-        QString kind;       // images zone controller reshade mod scripts settings mods
+        QString kind;       // see kinds()
+        QString game;       // t6 t5 t4 iw5 plutonium
         QString label;      // "My textures"
         QString title;      // "your textures"
         QString desc;       // what it covers, for the page
-        QString folder;     // storage\t6\backups\<kind>
+        QString folder;     // storage\<game>\backups\<kind>
         bool exists = false;
         int files = 0;
         qint64 bytes = 0;
@@ -35,13 +38,22 @@ namespace QolBackups
     };
     using Progress = std::function<void(const QString &text, int percent)>;
 
-    QStringList kinds();
-    // What "Back up all" and every install take. Leaves out "mod" (our own
-    // mod, which can be downloaded again) and "mods" (every other mod and
-    // custom map, which can run to many gigabytes); both are there to take
-    // by hand.
-    QStringList automaticKinds();
+    // Games that have backups, in page order. "plutonium" holds what every
+    // game shares (ReShade); its backup sits with Black Ops II's on disk.
+    QStringList games();
+    // Kind ids. Black Ops II keeps the bare names every earlier version used
+    // ("images"), so its old backups are still found; the other games use
+    // "<game>/<kind>" ("t5/images"). An empty game lists every kind.
+    QStringList kinds(const QString &game = QString());
+    // What "Back up all" and every install for that game take. Leaves out
+    // "mod" (our own mod, which can be downloaded again) and "mods" (every
+    // other mod and custom map, which can run to many gigabytes); both are
+    // there to take by hand.
+    QStringList automaticKinds(const QString &game = QStringLiteral("t6"));
+    QString kindFor(const QString &game, const QString &base); // ("t5", "images") -> "t5/images"
+    QString gameOf(const QString &kind);
     QString root(const AppSettings &s);          // <pluto>/storage/t6/backups
+    QString folder(const AppSettings &s, const QString &kind);
     bool exists(const AppSettings &s, const QString &kind);
     // `measure` walks the live folder and the backup to count files. Off, it
     // returns the names and whether a backup exists, for building the page.
@@ -64,7 +76,11 @@ namespace QolBackups
     // Puts a backup back over what is there. Nothing added since is deleted.
     // Files that come back are the player's again, so they are dropped from
     // the install manifests - otherwise the next Remove would delete them.
-    bool restore(const AppSettings &s, const QString &kind, const Progress &p, QString &error);
+    // `only`, when given, limits the restore to those paths (relative, as
+    // an install manifest lists them), so removing one pack puts back the
+    // files it replaced and leaves another pack's files alone.
+    bool restore(const AppSettings &s, const QString &kind, const Progress &p, QString &error,
+                 const QStringList &only = {});
     // Deletes one backup. The files on the PC are not touched.
     bool remove(const AppSettings &s, const QString &kind, QString &error);
 

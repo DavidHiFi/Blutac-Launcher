@@ -18,6 +18,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSet>
 #include <QUrl>
 #include <QTextStream>
 
@@ -103,15 +104,18 @@ bool writeManifest(const QString &path, const QStringList &rel)
     return true;
 }
 
-// Copies src/** into dest, recording every relative path written.
+// Copies src/** into dest, recording every relative path written. `onlySuffixes`
+// (lower case, no dot), when given, is the only file types copied.
 bool copyTree(const QString &src, const QString &dest, const QStringList &skipNames,
-              QStringList &written, QString &error)
+              QStringList &written, QString &error, const QStringList &onlySuffixes = {})
 {
     QDirIterator it(src, QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         const QString from = it.next();
         const QString rel = QDir(src).relativeFilePath(from);
         if (skipNames.contains(QFileInfo(from).fileName(), Qt::CaseInsensitive))
+            continue;
+        if (!onlySuffixes.isEmpty() && !onlySuffixes.contains(QFileInfo(from).suffix().toLower()))
             continue;
         const QString to = QDir(dest).filePath(rel);
         QDir().mkpath(QFileInfo(to).absolutePath());
@@ -127,12 +131,14 @@ bool copyTree(const QString &src, const QString &dest, const QStringList &skipNa
 }
 
 // Deletes the files a manifest lists, then the manifest. Refuses paths that
-// escape the destination.
-bool removeManifest(const AppSettings &s, const QString &kind, const QString &dest, QString &error)
+// escape the destination. `listed` gets the manifest's rows.
+bool removeManifestAt(const QString &mf, const QString &dest, QString &error, QStringList *listed = nullptr)
 {
-    const QString mf = manifestPath(s, kind);
     const QString root = QDir::cleanPath(dest);
-    for (const QString &rel : readManifest(mf)) {
+    const QStringList rows = readManifest(mf);
+    if (listed)
+        *listed << rows;
+    for (const QString &rel : rows) {
         const QString full = QDir::cleanPath(QDir(dest).filePath(rel));
         if (!full.startsWith(root + QLatin1Char('/'), Qt::CaseInsensitive))
             continue;
@@ -143,6 +149,53 @@ bool removeManifest(const AppSettings &s, const QString &kind, const QString &de
     }
     QFile::remove(mf);
     return true;
+}
+
+bool removeManifest(const AppSettings &s, const QString &kind, const QString &dest, QString &error,
+                    QStringList *listed = nullptr)
+{
+    return removeManifestAt(manifestPath(s, kind), dest, error, listed);
+}
+
+// The last pack to write a file owns it. The files just written leave every
+// other manifest of the same folder, so removing an older pack later does not
+// delete them out from under the newer one.
+void takeOver(const AppSettings &s, const QString &game, const QString &base,
+              const QStringList &written, const QString &owner)
+{
+    QSet<QString> mine;
+    for (const QString &r : written)
+        mine.insert(r.toLower());
+    const QDir state(QolService::stateDir(s, game));
+    QStringList names = state.entryList({QStringLiteral("installed-%1-*.txt").arg(base)}, QDir::Files);
+    if (game == QLatin1String("t6")) {
+        names << QStringLiteral("installed-%1.txt").arg(base);
+        if (base == QLatin1String("images"))
+            names << QStringLiteral("installed-controller.txt");
+    }
+    for (const QString &n : names) {
+        const QString path = state.filePath(n);
+        if (QFileInfo(path) == QFileInfo(owner) || !QFileInfo::exists(path))
+            continue;
+        const QStringList rows = readManifest(path);
+        QStringList kept;
+        for (const QString &r : rows)
+            if (!mine.contains(r.toLower()))
+                kept << r;
+        if (kept.size() == rows.size())
+            continue;
+        if (!kept.isEmpty()) {
+            writeManifest(path, kept);
+            continue;
+        }
+        // Every file is someone else's now, so that pack is no longer installed.
+        QFile::remove(path);
+        if (n == QLatin1String("installed-controller.txt"))
+            QFile::remove(state.filePath(QStringLiteral("controller-pack.txt")));
+        else if (n.startsWith(QStringLiteral("installed-%1-").arg(base)))
+            QFile::remove(state.filePath(QStringLiteral("packs/%1.json")
+                                             .arg(n.mid(base.size() + 11).chopped(4))));
+    }
 }
 
 QJsonArray githubReleases(const QString &repo, QString &error)
@@ -214,7 +267,8 @@ Asset findAsset(const QJsonArray &releases, const QStringList &want, const QStri
 // copied while we are at it. Each kind keeps its OLDEST backup, so after the
 // first install this costs one folder check per kind, not another copy.
 bool backupFirst(const AppSettings &s, const QStringList &required, const QolService::Progress &p,
-                 QString &error, const QolService::Cancelled &cancelled)
+                 QString &error, const QolService::Cancelled &cancelled,
+                 const QString &game = QStringLiteral("t6"))
 {
     if (!s.backupBeforeInstall)
         return true;
@@ -225,7 +279,7 @@ bool backupFirst(const AppSettings &s, const QStringList &required, const QolSer
     auto scaled = [&p](const QString &text, int pct) {
         if (p) p(text, pct < 0 ? -1 : 1 + pct / 25);   // the backup's share of the bar is 1-5%
     };
-    return QolBackups::backupBeforeInstall(s, required, QolBackups::automaticKinds(), scaled, error);
+    return QolBackups::backupBeforeInstall(s, required, QolBackups::automaticKinds(game), scaled, error);
 }
 
 QString tempDir(const QString &tag)
@@ -401,6 +455,16 @@ SeriesMod seriesFor(const QString &gameCode)
 
 QString t6Storage(const AppSettings &s) { return QDir(s.plutoniumInstance).filePath(QStringLiteral("storage/t6")); }
 QString stateDir(const AppSettings &s)  { return QDir(t6Storage(s)).filePath(QStringLiteral("_zm_qol_installer")); }
+QString gameStorage(const AppSettings &s, const QString &game)
+{
+    return QDir(s.plutoniumInstance).filePath(QStringLiteral("storage/") + game);
+}
+QString stateDir(const AppSettings &s, const QString &game)
+{
+    if (game == QLatin1String("t6") || game == QLatin1String("plutonium"))
+        return stateDir(s);
+    return QDir(gameStorage(s, game)).filePath(QStringLiteral("_blutac"));
+}
 QString reShadeVault(const AppSettings &s) { return QDir(stateDir(s)).filePath(QStringLiteral("reshade-vault")); }
 QString modsDir(const AppSettings &s, const QString &gameCode)
 {
@@ -579,14 +643,15 @@ bool installPack(const AppSettings &s, Pack pack, const Progress &p, QString &er
     if (!copyTree(src, packDest(s, pack), skip, written, error))
         return false;
     writeManifest(manifestPath(s, packKind(pack)), written);
+    takeOver(s, QStringLiteral("t6"), packKind(pack), written, manifestPath(s, packKind(pack)));
     QDir(unpacked).removeRecursively();
     if (p) p(QObject::tr("Done"), 100);
     return true;
 }
 
-bool removePack(const AppSettings &s, Pack pack, QString &error)
+bool removePack(const AppSettings &s, Pack pack, QString &error, QStringList *removed)
 {
-    return removeManifest(s, packKind(pack), packDest(s, pack), error);
+    return removeManifest(s, packKind(pack), packDest(s, pack), error, removed);
 }
 
 QString installedController(const AppSettings &s)
@@ -675,6 +740,7 @@ bool installController(const AppSettings &s, const QString &pack, const Progress
     if (!copyTree(src, dest, {}, written, error))
         return false;
     writeManifest(manifestPath(s, QStringLiteral("controller")), written);
+    takeOver(s, QStringLiteral("t6"), QStringLiteral("images"), written, manifestPath(s, QStringLiteral("controller")));
     QFile tag(QDir(stateDir(s)).filePath(QStringLiteral("controller-pack.txt")));
     if (tag.open(QIODevice::WriteOnly | QIODevice::Truncate))
         tag.write(pack.toUtf8());
@@ -682,12 +748,181 @@ bool installController(const AppSettings &s, const QString &pack, const Progress
     return true;
 }
 
-bool removeController(const AppSettings &s, QString &error)
+bool removeController(const AppSettings &s, QString &error, QStringList *removed)
 {
     const QString dest = QDir(t6Storage(s)).filePath(QStringLiteral("images"));
-    if (!removeManifest(s, QStringLiteral("controller"), dest, error))
+    if (!removeManifest(s, QStringLiteral("controller"), dest, error, removed))
         return false;
     QFile::remove(QDir(stateDir(s)).filePath(QStringLiteral("controller-pack.txt")));
+    return true;
+}
+
+namespace {
+bool packGame(const QString &g)
+{
+    return g == QLatin1String("t4") || g == QLatin1String("t5") || g == QLatin1String("t6");
+}
+// Ids name files on disk, so they stay plain.
+bool safeId(const QString &id)
+{
+    static const QRegularExpression re(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$"));
+    return re.match(id).hasMatch();
+}
+QString packBase(const QString &type)
+{
+    return type == QLatin1String("sound") ? QStringLiteral("zone") : QStringLiteral("images");
+}
+QString packManifest(const AppSettings &s, const QString &game, const QString &base, const QString &id)
+{
+    return QDir(stateDir(s, game)).filePath(QStringLiteral("installed-%1-%2.txt").arg(base, id));
+}
+QString packInfo(const AppSettings &s, const QString &game, const QString &id)
+{
+    return QDir(stateDir(s, game)).filePath(QStringLiteral("packs/%1.json").arg(id));
+}
+}
+
+bool communityPackInstalled(const AppSettings &s, const QString &game, const QString &id)
+{
+    if (!packGame(game) || !safeId(id))
+        return false;
+    return QFileInfo::exists(packManifest(s, game, QStringLiteral("images"), id))
+        || QFileInfo::exists(packManifest(s, game, QStringLiteral("zone"), id));
+}
+
+QList<CommunityPack> communityPacks(const AppSettings &s, const QString &game)
+{
+    QList<CommunityPack> out;
+    if (!packGame(game))
+        return out;
+    const QDir dir(QDir(stateDir(s, game)).filePath(QStringLiteral("packs")));
+    for (const QString &f : dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name)) {
+        QFile file(dir.filePath(f));
+        if (!file.open(QIODevice::ReadOnly))
+            continue;
+        const QJsonObject o = QJsonDocument::fromJson(file.readAll()).object();
+        CommunityPack pack;
+        pack.id = QFileInfo(f).completeBaseName();
+        pack.name = o.value(QStringLiteral("name")).toString(pack.id);
+        pack.game = game;
+        pack.type = o.value(QStringLiteral("type")).toString();
+        pack.version = o.value(QStringLiteral("version")).toString();
+        pack.url = o.value(QStringLiteral("url")).toString();
+        pack.partial = o.value(QStringLiteral("partial")).toBool();
+        if (communityPackInstalled(s, game, pack.id))
+            out << pack;
+    }
+    return out;
+}
+
+bool installCommunityPack(const AppSettings &s, const CommunityPack &pack, const Progress &p,
+                          QString &error, const Cancelled &cancelled)
+{
+    if (!packGame(pack.game) || !safeId(pack.id)
+        || (pack.type != QLatin1String("texture") && pack.type != QLatin1String("sound"))) {
+        error = QObject::tr("%1 is not a texture or sound pack for World at War, Black Ops or "
+                            "Black Ops II.").arg(pack.name);
+        return false;
+    }
+    if (const QString g = runningGame(); !g.isEmpty()) {
+        error = QObject::tr("Close Plutonium first (%1 is running). The game keeps the mod files open while it runs.").arg(g);
+        return false;
+    }
+    const QString base = packBase(pack.type);
+    if (!backupFirst(s, {QolBackups::kindFor(pack.game, base)}, p, error, cancelled, pack.game))
+        return false;
+
+    // "owner/repo" takes the newest release's zip; anything else is a direct link.
+    Asset asset;
+    static const QRegularExpression repo(QStringLiteral("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"));
+    if (repo.match(pack.url).hasMatch()) {
+        if (p) p(QObject::tr("Looking up the latest release..."), 2);
+        const QJsonArray rels = githubReleases(pack.url, error);
+        if (rels.isEmpty())
+            return false;
+        asset = findAsset(rels, {}, {});
+        if (!asset.isValid()) {
+            error = QObject::tr("No .zip found in the releases of %1.").arg(pack.url);
+            return false;
+        }
+    } else {
+        const QUrl url(pack.url);
+        if (!url.isValid() || url.scheme() != QLatin1String("https")) {
+            error = QObject::tr("%1 has no download link.").arg(pack.name);
+            return false;
+        }
+        asset.url = pack.url;
+        asset.name = url.fileName().isEmpty() ? pack.id + QStringLiteral(".zip") : url.fileName();
+    }
+    QString unpacked;
+    if (!downloadAndUnpack(asset, base, p, unpacked, error, cancelled))
+        return false;
+    const QString src = packRoot(unpacked, base);
+    if (cancelled)
+        cancelled->lock();
+    if (p) p(QObject::tr("Copying files..."), 85);
+
+    const QString dest = QDir(gameStorage(s, pack.game)).filePath(base);
+    const QString mf = packManifest(s, pack.game, base, pack.id);
+    // An update replaces the old version whole, so files it dropped go too.
+    QString ignore;
+    removeManifestAt(mf, dest, ignore);
+    // Only the file types the folder is for: no readme, no stray .exe.
+    const QStringList types = base == QLatin1String("images")
+        ? QStringList{QStringLiteral("iwi")}
+        : QStringList{QStringLiteral("sabs"), QStringLiteral("sabl"), QStringLiteral("ff")};
+    QStringList written;
+    const bool copied = copyTree(src, dest, {}, written, error, types);
+    QDir(QFileInfo(unpacked).absolutePath()).removeRecursively();
+    if (written.isEmpty()) {
+        if (copied)
+            error = base == QLatin1String("images")
+                ? QObject::tr("%1 has no .iwi textures in it.").arg(asset.name)
+                : QObject::tr("%1 has no sound banks (.sabs, .sabl) or zone files in it.").arg(asset.name);
+        QFile::remove(packInfo(s, pack.game, pack.id));
+        return false;
+    }
+    // A copy that stopped part way still records what it wrote, so the Mods
+    // tab lists it and Remove can take it back. The Workshop offers it again
+    // as an update.
+    writeManifest(mf, written);
+    takeOver(s, pack.game, base, written, mf);
+    QJsonObject info;
+    info.insert(QStringLiteral("name"), pack.name);
+    info.insert(QStringLiteral("type"), pack.type);
+    info.insert(QStringLiteral("version"), pack.version.isEmpty() ? asset.tag : pack.version);
+    if (!copied)
+        info.insert(QStringLiteral("partial"), true);
+    info.insert(QStringLiteral("url"), pack.url);
+    const QString infoPath = packInfo(s, pack.game, pack.id);
+    QDir().mkpath(QFileInfo(infoPath).absolutePath());
+    QFile f(infoPath);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        f.write(QJsonDocument(info).toJson());
+    if (!copied)
+        return false;
+    if (p) p(QObject::tr("Done"), 100);
+    return true;
+}
+
+bool removeCommunityPack(const AppSettings &s, const QString &game, const QString &id, QString &error,
+                         QStringList *removed)
+{
+    if (!packGame(game) || !safeId(id)) {
+        error = QObject::tr("There is no pack called %1.").arg(id);
+        return false;
+    }
+    if (const QString g = runningGame(); !g.isEmpty()) {
+        error = QObject::tr("Close Plutonium first (%1 is running). The game keeps the mod files open while it runs.").arg(g);
+        return false;
+    }
+    for (const QString &base : {QStringLiteral("images"), QStringLiteral("zone")}) {
+        const QString mf = packManifest(s, game, base, id);
+        if (QFileInfo::exists(mf)
+            && !removeManifestAt(mf, QDir(gameStorage(s, game)).filePath(base), error, removed))
+            return false;
+    }
+    QFile::remove(packInfo(s, game, id));
     return true;
 }
 
@@ -1161,21 +1396,6 @@ bool dlssPayloadReady(const AppSettings &s)
                == QStringList{QStringLiteral("renodx-dlss5.addon64")};
 }
 
-QString dlssPayloadSummary(const AppSettings &s)
-{
-    if (!dlssPayloadReady(s))
-        return QObject::tr("Not installed yet.");
-    qint64 bytes = 0;
-    QDirIterator it(reShadeLanVault(s), QDir::Files, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        it.next();
-        bytes += it.fileInfo().size();
-    }
-    const QString version = installedDlssVersion(s);
-    return version.isEmpty() ? QObject::tr("imported by an older version, %1 MB").arg(bytes / 1000000)
-                             : QObject::tr("version %1, %2 MB").arg(version).arg(bytes / 1000000);
-}
-
 QString installedDlssVersion(const AppSettings &s)
 {
     QFile f(QDir(reShadeLanVault(s)).filePath(QStringLiteral("payload.json")));
@@ -1574,7 +1794,7 @@ bool applyReShadeMode(const AppSettings &s, ReShadeMode mode, bool dlss, QString
     const bool lan = mode == ReShadeMode::Lan;
     const bool withDlss = lan && dlss && dlssPayloadReady(s);
     if (lan && dlss && !withDlss) {
-        error = QObject::tr("Install DLSS 5 from the Quality of Life page before starting LAN play.");
+        error = QObject::tr("Install DLSS 5 from the Workshop (under Plutonium) before starting LAN play.");
         return false;
     }
 

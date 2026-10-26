@@ -16,7 +16,7 @@
 
 #include "pages/PlayPage.h"
 #include "pages/HomePage.h"
-#include "pages/QolPage.h"
+#include "pages/BackupsPage.h"
 #include "QolService.h"
 #include "pages/ModsPage.h"
 #include "pages/ServerPage.h"
@@ -154,14 +154,14 @@ MainWindow::MainWindow(QWidget *parent)
     m_stack = new QStackedWidget(this);
     m_playPage = new PlayPage(m_settings, this);
     m_homePage = new HomePage(m_settings, this);
-    m_qolPage = new QolPage(m_settings, this);
+    m_backupsPage = new BackupsPage(m_settings, this);
     m_modsPage = new ModsPage(m_settings, this);
     m_serverPage = new ServerPage(m_settings, this);
     m_settingsPage = new SettingsPage(m_settings, this);
     m_aboutPage = new AboutPage(this);
     m_stack->addWidget(m_playPage);
     m_stack->addWidget(m_homePage);
-    m_stack->addWidget(m_qolPage);
+    m_stack->addWidget(m_backupsPage);
     m_stack->addWidget(m_modsPage);
     m_stack->addWidget(m_serverPage);
     m_stack->addWidget(m_settingsPage);
@@ -204,26 +204,20 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(m_homePage, &HomePage::installRequested, this, [this](const QString &modId) {
-        // Series mods ship plain release zips, not a CLL manifest: the
-        // Quality of Life page owns those installs.
-        for (const QolService::SeriesMod &sm : QolService::series()) {
-            if (sm.released && modId == QStringLiteral("%1-quality-of-life").arg(sm.gameCode)) {
-                showTool(ToolQol);
-                m_qolPage->installSeriesMod(sm.gameCode);
-                return;
-            }
-        }
         showTool(ToolMods);
         if (!modId.isEmpty())
             m_modsPage->installFromCatalog(modId);
     });
-    connect(m_homePage, &HomePage::gameRequested, this, [this](const QString &gameId) {
-        m_modsPage->selectGame(gameId);
-        m_homePage->selectGame(gameId);
-    });
     connect(m_playPage, &PlayPage::launchRequested, this, &MainWindow::onLaunchGame);
     connect(m_playPage, &PlayPage::launchOnlineRequested, this, &MainWindow::onLaunchOnline);
-    connect(m_qolPage, &QolPage::installedChanged, this, [this]() {
+    // The Workshop installs packs, add-ons, scripts and the QoL mods itself, so
+    // the pages that list or launch them catch up here.
+    connect(m_homePage, &HomePage::installedChanged, this, [this]() {
+        m_modsPage->refreshList();
+        m_playPage->syncLaunchOptions();
+        m_backupsPage->refresh();
+    });
+    connect(m_backupsPage, &BackupsPage::installedChanged, this, [this]() {
         m_modsPage->refreshList();
         m_playPage->syncLaunchOptions();
         if (m_homePage)
@@ -236,10 +230,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_modsPage, &ModsPage::catalogChanged, this, [this]() {
         if (m_homePage)
             m_homePage->refreshInstallState();
+        m_playPage->syncLaunchOptions();
+        m_backupsPage->refresh();
     });
     connect(m_settingsPage, &SettingsPage::plutoniumFolderChanged, this, [this]() {
         m_modsPage->refreshList();
-        m_qolPage->refresh();
+        m_backupsPage->refresh();
         m_serverPage->refreshList();
         if (m_homePage)
             m_homePage->refreshInstallState();
@@ -330,11 +326,11 @@ void MainWindow::retranslate()
     if (m_saveBtn)
         m_saveBtn->setText(tr("Salvar"));
     const QStringList tools = {
-        tr("Game Configuration"), tr("Mods"), tr("Servidor LAN (beta)"), tr("Configuracoes"), tr("Sobre")
+        tr("Backups"), tr("Mods"), tr("Servidor LAN (beta)"), tr("Configuracoes"), tr("Sobre")
     };
     for (int i = 0; i < m_toolButtons.size() && i < tools.size(); ++i)
         m_toolButtons[i]->setText("  " + tools[i]);
-    if (m_qolPage) m_qolPage->retranslate();
+    if (m_backupsPage) m_backupsPage->retranslate();
     DownloadCenter::instance()->retranslate();
     applyHeader(m_toolIndex);
     if (m_homeNavBtn) m_homeNavBtn->setText("  " + tr("Início"));
@@ -497,7 +493,7 @@ QWidget *MainWindow::buildSidebar()
 
     struct Tool { QString text; QString icon; };
     const QList<Tool> tools = {
-        {tr("Game Configuration"), ":/icons/qol.svg"},
+        {tr("Backups"), ":/icons/backup.svg"},
         {tr("Mods"), ":/icons/mods.svg"},
         {tr("Servidor LAN (beta)"), ":/icons/server.svg"},
         {tr("Configuracoes"), ":/icons/misc.svg"},
@@ -592,8 +588,8 @@ void MainWindow::applyHeader(int toolIndex)
     case ToolHome:
         info = {tr("Início"), tr("Descubra mods e mapas por jogo."), false};
         break;
-    case ToolQol:
-        info = {tr("Game Configuration"), tr("The series: install, update and remove each game's mod and its extras."), false};
+    case ToolBackups:
+        info = {tr("Backups"), tr("Copies of your own files for each game, ready to put back."), false};
         break;
     case ToolMods:
         info = {tr("Mods"), tr("Instale pacotes e mapas customizados por jogo."), false};
@@ -641,6 +637,12 @@ void MainWindow::applyHomeVisibility()
         selectGame(m_gameIndex);
 }
 
+void MainWindow::debugWorkshopGame(const QString &gameId)
+{
+    showTool(ToolHome);
+    m_homePage->selectGame(gameId);
+}
+
 void MainWindow::showTool(int toolIndex)
 {
     if (toolIndex == ToolHome && !m_settings.homeEnabled) {
@@ -651,8 +653,8 @@ void MainWindow::showTool(int toolIndex)
     const QString gameId = (m_gameIndex >= 0 && m_gameIndex < m_gameButtons.size())
                                ? m_gameButtons[m_gameIndex]->property("gameId").toString()
                                : QString();
-    if (toolIndex == ToolQol)
-        m_qolPage->refresh();
+    if (toolIndex == ToolBackups)
+        m_backupsPage->refresh();
     else if (toolIndex == ToolMods)
         m_modsPage->selectGame(gameId);
     else if (toolIndex == ToolServer)

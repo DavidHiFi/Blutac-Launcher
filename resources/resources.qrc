@@ -9,7 +9,7 @@
         <file>icons/icon.ico</file>
         <file>icons/main.svg</file>
         <file>icons/mods.svg</file>
-        <file>icons/qol.svg</file>
+        <file>icons/backup.svg</file>
         <file>icons/server.svg</file>
         <file>icons/misc.svg</file>
         <file>icons/pen.svg</file>
@@ -18,6 +18,8 @@
         <file>icons/play.svg</file>
         <file>icons/check.svg</file>
         <file>icons/check_light.svg</file>
+        <file>icons/chevron_down.svg</file>
+        <file>icons/chevron_down_dark.svg</file>
         <file>media/t4_icon.jpg</file>
         <file>media/t4_logo.png</file>
         <file>media/t4_bg_mp.jpg</file>

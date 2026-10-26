@@ -9,7 +9,8 @@ class AppSettings;
 
 // The Quality of Life series: what each game's mod is, whether it is installed,
 // and the extra packs the Black Ops II mod ships (HD textures, custom sounds,
-// controller icons) plus ReShade. Everything here is synchronous; callers run
+// controller icons), community texture and sound packs, ReShade and DLSS 5.
+// Everything here is synchronous; callers run
 // installs on a worker thread and report through the DownloadCenter panel,
 // the same as every page does.
 namespace QolService
@@ -52,13 +53,34 @@ namespace QolService
     bool packInstalled(const AppSettings &s, Pack pack);
     bool installPack(const AppSettings &s, Pack pack, const Progress &p, QString &error,
                      const Cancelled &cancelled = {});
-    bool removePack(const AppSettings &s, Pack pack, QString &error);
+    // The removes below can list the files they took off disk in `removed`.
+    bool removePack(const AppSettings &s, Pack pack, QString &error, QStringList *removed = nullptr);
 
     // Controller icon packs: "ps5", "switch", "xbox".
     QString installedController(const AppSettings &s); // "" when game defaults
     bool installController(const AppSettings &s, const QString &pack, const Progress &p, QString &error,
                            const Cancelled &cancelled = {});
-    bool removeController(const AppSettings &s, QString &error);
+    bool removeController(const AppSettings &s, QString &error, QStringList *removed = nullptr);
+
+    // Community packs from the Workshop: one archive of textures or sounds,
+    // copied into storage\<game>\images or storage\<game>\zone. Each keeps
+    // its own manifest, so Remove takes back exactly the files it wrote.
+    // World at War, Black Ops and Black Ops II only.
+    struct CommunityPack {
+        QString id;       // catalog id
+        QString name;
+        QString game;     // t4 t5 t6
+        QString type;     // "texture" | "sound"
+        QString version;
+        QString url;      // a direct archive link, or a GitHub repo (newest release zip)
+        bool partial = false; // the copy stopped part way
+    };
+    QList<CommunityPack> communityPacks(const AppSettings &s, const QString &game);
+    bool communityPackInstalled(const AppSettings &s, const QString &game, const QString &id);
+    bool installCommunityPack(const AppSettings &s, const CommunityPack &pack, const Progress &p,
+                              QString &error, const Cancelled &cancelled = {});
+    bool removeCommunityPack(const AppSettings &s, const QString &game, const QString &id, QString &error,
+                             QStringList *removed = nullptr);
 
     // ReShade: dxgi.dll + presets into <pluto>\bin, mirrored to the vault the
     // watchdog restores from. Backs up whatever was in bin first.
@@ -98,7 +120,6 @@ namespace QolService
     // checks the archive and every file in it, fetches LumeniteFX from its
     // author, and swaps it in whole; nothing half-installed is ever used.
     bool dlssPayloadReady(const AppSettings &s);
-    QString dlssPayloadSummary(const AppSettings &s);
     QString installedDlssVersion(const AppSettings &s);   // "" for none, or a pre-2.3 import
     bool latestDlssRelease(DlssRelease &release, QString &error);
     bool installDlssPayload(const AppSettings &s, const DlssRelease &release, const Progress &p, QString &error);
@@ -119,6 +140,10 @@ namespace QolService
     // Paths
     QString t6Storage(const AppSettings &s);          // <pluto>/storage/t6
     QString stateDir(const AppSettings &s);           // <pluto>/storage/t6/_zm_qol_installer
+    QString gameStorage(const AppSettings &s, const QString &game);  // <pluto>/storage/<game>
+    // Where install manifests live. Black Ops II keeps its old folder; the
+    // other games use storage/<game>/_blutac.
+    QString stateDir(const AppSettings &s, const QString &game);
     QString reShadeVault(const AppSettings &s);       // stateDir/reshade-vault
     QString reShadeLanVault(const AppSettings &s);    // stateDir/reshade-lan
     QString modsDir(const AppSettings &s, const QString &gameCode);

@@ -17,7 +17,7 @@ class ServerPage;
 class SettingsPage;
 class AboutPage;
 class HomePage;
-class QolPage;
+class BackupsPage;
 class CaptionButtons;
 
 class MainWindow : public QMainWindow
@@ -27,6 +27,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     Q_INVOKABLE void debugShowPage(int index) { showTool(index); }
     Q_INVOKABLE void debugSelectGame(int index) { selectGame(index); }
+    Q_INVOKABLE void debugWorkshopGame(const QString &gameId);
 
 private slots:
     void onLaunchGame(const QString &gameId, const QString &mode);
@@ -38,8 +39,8 @@ private slots:
     void onPollRunningProcess();
 
 private:
-    enum ToolIndex { ToolPlay = 0, ToolHome, ToolQol, ToolMods, ToolServer, ToolSettings, ToolAbout };
-    static constexpr int kFirstTool = ToolQol; // sidebar tool buttons start here
+    enum ToolIndex { ToolPlay = 0, ToolHome, ToolBackups, ToolMods, ToolServer, ToolSettings, ToolAbout };
+    static constexpr int kFirstTool = ToolBackups; // sidebar tool buttons start here
 
     // ReShade for the session about to start: the right build in bin, or
     // none at all when the box is unticked.
@@ -74,7 +75,7 @@ private:
     QStackedWidget *m_stack = nullptr;
     PlayPage *m_playPage = nullptr;
     HomePage *m_homePage = nullptr;
-    QolPage *m_qolPage = nullptr;
+    BackupsPage *m_backupsPage = nullptr;
     ModsPage *m_modsPage = nullptr;
     ServerPage *m_serverPage = nullptr;
     SettingsPage *m_settingsPage = nullptr;
