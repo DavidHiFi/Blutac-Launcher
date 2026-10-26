@@ -2,9 +2,11 @@
 #include "../ScriptStore.h"
 #include "../Theme.h"
 #include "../Version.h"
+#include "../WorkshopItems.h"
 #include "AppSettings.h"
 
 #include <QApplication>
+#include <QComboBox>
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDir>
@@ -28,14 +30,17 @@
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QStyle>
 #include <QVBoxLayout>
 #include <QVariantAnimation>
 
+#include <algorithm>
 #include <functional>
 
 namespace {
 
 constexpr int kCardMinWidth = 210;
+constexpr int kSectionRows = 2; // rows a capped section shows before "See all"
 inline int kRadius() { return Theme::radius(); }
 
 QNetworkRequest remoteImageRequest(const QString &url)
@@ -90,11 +95,13 @@ public:
     }
     void setSource(const QPixmap &pm) { m_src = pm; m_cache = QPixmap(); update(); }
     void setBadge(const QString &text) { m_badge = text; update(); }
-    // Scripts have no art: the cover shows the file name and the game code.
-    void setScriptCover(const QString &file, const QString &gameCode)
+    // Scripts and packs have no art: the cover shows a name (a script's file
+    // name in mono) and the game code.
+    void setTextCover(const QString &text, const QString &gameCode, bool mono)
     {
-        m_file = file;
+        m_file = text;
         m_code = gameCode;
+        m_mono = mono;
         update();
     }
     int heightForWidth(int w) const override { return int(w * 10.0 / 16.0); }
@@ -131,10 +138,16 @@ protected:
             g.setColorAt(1.0, Qt::transparent);
             p.fillPath(path, g);
 
-            QFont mono(QStringLiteral("Cascadia Mono"));
-            mono.setStyleHint(QFont::Monospace);
-            mono.setPointSizeF(12.5);
-            p.setFont(mono);
+            QFont cover = font();
+            if (m_mono) {
+                cover = QFont(QStringLiteral("Cascadia Mono"));
+                cover.setStyleHint(QFont::Monospace);
+                cover.setPointSizeF(12.5);
+            } else {
+                cover.setPointSizeF(cover.pointSizeF() + 3.0);
+                cover.setBold(true);
+            }
+            p.setFont(cover);
             p.setPen(Theme::color("ACCENT_SOFT"));
             const QRect inner = rect().adjusted(14, 0, -14, 0);
             p.drawText(inner, Qt::AlignCenter,
@@ -166,11 +179,62 @@ protected:
 private:
     QPixmap m_src, m_cache;
     QString m_badge, m_file, m_code;
+    bool m_mono = true;
 };
 
 QString modeName(const QString &mode)
 {
     return mode == QLatin1String("mp") ? QObject::tr("Multiplayer") : QObject::tr("Zombies");
+}
+
+// The Workshop's categories. Plutonium add-ons count as mods.
+QString categoryOf(const HomeCatalog::Mod &m)
+{
+    if (m.isScript() || m.isPack())
+        return m.type;
+    return QStringLiteral("mod");
+}
+
+QString categoryName(const QString &category)
+{
+    if (category == QLatin1String("script"))
+        return QObject::tr("Scripts");
+    if (category == QLatin1String("texture"))
+        return QObject::tr("Texture packs");
+    if (category == QLatin1String("sound"))
+        return QObject::tr("Sound packs");
+    return QObject::tr("Mods");
+}
+
+QString badgeFor(const HomeCatalog::Mod &m)
+{
+    if (m.isScript())
+        return QObject::tr("Script · %1").arg(m.mode.toUpper());
+    if (m.type == QLatin1String("texture"))
+        return QObject::tr("Texture pack");
+    if (m.type == QLatin1String("sound"))
+        return QObject::tr("Sound pack");
+    if (m.isPlutonium())
+        return QObject::tr("Add-on");
+    return QObject::tr("Mod");
+}
+
+// Where a pack's files go, as the user sees it in the Plutonium folder.
+QString packFolder(const HomeCatalog::Mod &m)
+{
+    return QStringLiteral("storage\\%1\\%2")
+        .arg(m.game, m.type == QLatin1String("sound") ? QStringLiteral("zone") : QStringLiteral("images"));
+}
+
+QString itemCount(int n)
+{
+    return n == 1 ? QObject::tr("1 item") : QObject::tr("%1 items").arg(n);
+}
+
+// Scripts, packs and add-ons can be removed right here; mods are removed in the Mods tab.
+bool removableHere(const HomeCatalog::Mod &m)
+{
+    return m.isScript() || m.isPack() || m.isPlutonium();
 }
 
 // --------------------------------------------------------------- mod card
@@ -195,13 +259,11 @@ public:
         const bool script = mod.isScript();
         m_thumb = new Thumb(this);
         m_thumb->setSource(HomeCatalog::pixmap(mod.image));
-        if (script) {
-            m_thumb->setBadge(QObject::tr("Script · %1").arg(mod.mode.toUpper()));
-            m_thumb->setScriptCover(QFileInfo(mod.file).fileName(), gameCode);
-        } else {
-            m_thumb->setBadge(mod.kind.compare("github", Qt::CaseInsensitive) == 0 ? QStringLiteral("GitHub")
-                                                                                   : QStringLiteral("CLL"));
-        }
+        m_thumb->setBadge(badgeFor(mod));
+        if (script)
+            m_thumb->setTextCover(QFileInfo(mod.file).fileName(), gameCode, true);
+        else
+            m_thumb->setTextCover(mod.name, gameCode, false);
         v->addWidget(m_thumb);
 
         auto *body = new QVBoxLayout();
@@ -238,17 +300,17 @@ public:
         body->addSpacing(2);
         body->addWidget(meta);
 
-        // One click from the grid: install, update, or (scripts) remove.
+        // One click from the grid: install, update, or remove.
+        const bool remove = removableHere(mod) && presence == HomeCatalog::Presence::Installed;
         QString action;
         if (presence == HomeCatalog::Presence::Missing)
             action = QObject::tr("Instalar");
         else if (presence == HomeCatalog::Presence::Update)
             action = QObject::tr("Atualizar");
-        else if (script)
+        else if (remove)
             action = QObject::tr("Remove");
         if (!action.isEmpty()) {
             auto *btn = new QPushButton(action, this);
-            const bool remove = script && presence == HomeCatalog::Presence::Installed;
             btn->setProperty("cssClass", remove ? "ghost" : "primary");
             btn->setCursor(Qt::PointingHandCursor);
             btn->setFixedHeight(30);
@@ -621,7 +683,9 @@ public:
         art->setSource(cover);
         art->setBadge(gameName);
         if (script)
-            art->setScriptCover(QFileInfo(mod.file).fileName(), modeName(mod.mode));
+            art->setTextCover(QFileInfo(mod.file).fileName(), modeName(mod.mode), true);
+        else
+            art->setTextCover(mod.name, badgeFor(mod), false);
         v->addWidget(art);
 
         if (cover.isNull() && HomeCatalog::isRemote(mod.image) && net) {
@@ -669,20 +733,24 @@ public:
         grid->setHorizontalSpacing(24);
         grid->setVerticalSpacing(2);
         const QString version = mod.version.isEmpty() ? QStringLiteral("—") : mod.version;
-        const QList<QPair<QString, QString>> facts = script
-            ? QList<QPair<QString, QString>>{
-                  {QObject::tr("AUTOR"), mod.author},
-                  {QObject::tr("VERSAO"), version},
-                  {QObject::tr("MODE"), modeName(mod.mode)},
-                  {QObject::tr("RUNS WITH"), madeFor.isEmpty() ? QObject::tr("The base game") : madeFor},
-              }
-            : QList<QPair<QString, QString>>{
-                  {QObject::tr("AUTOR"), mod.author},
-                  {QObject::tr("VERSAO"), version},
-                  {QObject::tr("TAMANHO"), mod.size.isEmpty() ? QStringLiteral("—") : mod.size},
-                  {QObject::tr("ORIGEM"), mod.kind.compare("github", Qt::CaseInsensitive) == 0
-                                              ? QStringLiteral("GitHub") : QObject::tr("Pacote .cll")},
-              };
+        const QString size = mod.size.isEmpty() ? QStringLiteral("—") : mod.size;
+        QList<QPair<QString, QString>> facts = {{QObject::tr("AUTOR"), mod.author},
+                                                {QObject::tr("VERSAO"), version}};
+        if (script)
+            facts << QPair<QString, QString>{QObject::tr("MODE"), modeName(mod.mode)}
+                  << QPair<QString, QString>{QObject::tr("RUNS WITH"),
+                                             madeFor.isEmpty() ? QObject::tr("The base game") : madeFor};
+        else if (mod.isPack())
+            facts << QPair<QString, QString>{QObject::tr("TAMANHO"), size}
+                  << QPair<QString, QString>{QObject::tr("GOES INTO"), packFolder(mod)};
+        else if (mod.isPlutonium())
+            facts << QPair<QString, QString>{QObject::tr("TAMANHO"), size}
+                  << QPair<QString, QString>{QObject::tr("FOR"), QObject::tr("Plutonium")};
+        else
+            facts << QPair<QString, QString>{QObject::tr("TAMANHO"), size}
+                  << QPair<QString, QString>{QObject::tr("ORIGEM"),
+                                             mod.kind.compare("github", Qt::CaseInsensitive) == 0
+                                                 ? QStringLiteral("GitHub") : QObject::tr("Pacote .cll")};
         for (int i = 0; i < facts.size(); ++i) {
             auto *k = new QLabel(facts[i].first, this);
             k->setObjectName("CardKicker");
@@ -700,11 +768,12 @@ public:
                                this);
         url->setObjectName("MutedHint");
         url->setWordWrap(true);
+        url->setVisible(!url->text().isEmpty());
         body->addWidget(url);
 
         auto *row = new QHBoxLayout();
         row->addStretch(1);
-        if (script && presence == HomeCatalog::Presence::Installed) {
+        if (removableHere(mod) && presence == HomeCatalog::Presence::Installed) {
             auto *remove = new QPushButton(QObject::tr("Remove"), this);
             remove->setMinimumHeight(38);
             connect(remove, &QPushButton::clicked, this, [this]() { done(kRemove); });
@@ -758,8 +827,9 @@ void HomePage::buildUi()
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    // Row 1: search, Everything | Mods | Scripts, and the add/share/import buttons.
-    // Row 2: game and mod chips; pick any mix of them.
+    // Row 1: search, and the add/share/import buttons.
+    // Row 2: one game at a time, or all of them.
+    // Row 3: the category (mods, scripts, packs) and the sort order.
     auto *bar = new QWidget(this);
     bar->setObjectName("HomeBar");
     auto *barRows = new QVBoxLayout(bar);
@@ -770,33 +840,12 @@ void HomePage::buildUi()
     barRows->addLayout(barLayout);
 
     m_search = new QLineEdit(bar);
-    m_search->setPlaceholderText(tr("Search mods, scripts, authors…"));
     m_search->setClearButtonEnabled(true);
     m_search->setMinimumHeight(34);
     m_search->setMinimumWidth(220);
-    m_search->setMaximumWidth(360);
+    m_search->setMaximumWidth(420);
     connect(m_search, &QLineEdit::textChanged, this, [this](const QString &) { m_searchDebounce.start(); });
     barLayout->addWidget(m_search);
-
-    auto *types = new QHBoxLayout();
-    types->setSpacing(0);
-    const QStringList typeIds = {QStringLiteral("all"), QStringLiteral("mod"), QStringLiteral("script")};
-    for (int i = 0; i < typeIds.size(); ++i) {
-        auto *b = new QPushButton(bar);
-        b->setObjectName("TypeSegment");
-        b->setCheckable(true);
-        b->setCursor(Qt::PointingHandCursor);
-        b->setMinimumHeight(34);
-        b->setProperty("typeId", typeIds[i]);
-        if (i == 0)
-            b->setProperty("segment", "left");
-        else if (i == typeIds.size() - 1)
-            b->setProperty("segment", "right");
-        connect(b, &QPushButton::clicked, this, [this, id = typeIds[i]]() { setType(id); });
-        types->addWidget(b);
-        m_typeButtons << b;
-    }
-    barLayout->addLayout(types);
     barLayout->addStretch(1);
 
     m_addScriptBtn = new QPushButton(bar);
@@ -822,18 +871,41 @@ void HomePage::buildUi()
 
     m_filterBar = new QWidget(bar);
     m_filterBar->setObjectName("HomeFilters");
-    // Games on one row, the mods scripts can be made for on the next, so
-    // neither row runs out of width.
-    auto *filterRows = new QVBoxLayout(m_filterBar);
-    filterRows->setContentsMargins(0, 0, 0, 0);
-    filterRows->setSpacing(8);
-    m_filterLayout = new QHBoxLayout();
+    m_filterLayout = new QHBoxLayout(m_filterBar);
+    m_filterLayout->setContentsMargins(0, 0, 0, 0);
     m_filterLayout->setSpacing(6);
-    m_hubLayout = new QHBoxLayout();
-    m_hubLayout->setSpacing(6);
-    filterRows->addLayout(m_filterLayout);
-    filterRows->addLayout(m_hubLayout);
     barRows->addWidget(m_filterBar);
+
+    m_typeBar = new QWidget(bar);
+    auto *typeRow = new QHBoxLayout(m_typeBar);
+    typeRow->setContentsMargins(0, 0, 0, 0);
+    typeRow->setSpacing(0);
+    const QStringList typeIds = {QStringLiteral("all"), QStringLiteral("mod"), QStringLiteral("script"),
+                                 QStringLiteral("texture"), QStringLiteral("sound")};
+    for (int i = 0; i < typeIds.size(); ++i) {
+        auto *b = new QPushButton(m_typeBar);
+        b->setObjectName("TypeSegment");
+        b->setCheckable(true);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setMinimumHeight(32);
+        b->setProperty("typeId", typeIds[i]);
+        connect(b, &QPushButton::clicked, this, [this, id = typeIds[i]]() { setType(id); });
+        typeRow->addWidget(b);
+        m_typeButtons << b;
+    }
+    typeRow->addStretch(1);
+    m_sortLabel = new QLabel(m_typeBar);
+    m_sortLabel->setObjectName("ChipRowLabel");
+    typeRow->addWidget(m_sortLabel);
+    typeRow->addSpacing(8);
+    m_sort = new QComboBox(m_typeBar);
+    m_sort->setMinimumHeight(32);
+    m_sort->setCursor(Qt::PointingHandCursor);
+    for (const char *id : {"featured", "name", "installed"})
+        m_sort->addItem(QString(), QString::fromLatin1(id));
+    connect(m_sort, &QComboBox::currentIndexChanged, this, [this](int) { rebuildContent(); });
+    typeRow->addWidget(m_sort);
+    barRows->addWidget(m_typeBar);
 
     root->addWidget(bar);
     retranslateBar();
@@ -855,18 +927,21 @@ void HomePage::buildUi()
     m_contentLayout->addWidget(m_status);
 
     m_hero = new HeroSlider(m_content);
-    m_hero->onInstall = [this](const QString &id) {
-        const HomeCatalog::Mod *m = HomeCatalog::findMod(m_catalog, id);
-        if (m && m->isScript())
-            installScript(id);
-        else
-            emit installRequested(id);
-    };
+    m_hero->onInstall = [this](const QString &id) { installItem(id); };
     m_hero->onDetails = [this](const QString &id) { openDetails(id); };
     m_contentLayout->addWidget(m_hero);
 
     m_scroll->setWidget(m_content);
     root->addWidget(m_scroll, 1);
+
+    m_scroll->viewport()->installEventFilter(this);
+    m_relayout.setSingleShot(true);
+    m_relayout.setInterval(60);
+    connect(&m_relayout, &QTimer::timeout, this, [this]() {
+        const int scroll = m_scroll->verticalScrollBar()->value();
+        rebuildContent();
+        QTimer::singleShot(0, this, [this, scroll]() { m_scroll->verticalScrollBar()->setValue(scroll); });
+    });
 }
 
 void HomePage::reload()
@@ -891,110 +966,104 @@ void HomePage::reload()
 void HomePage::refreshInstallState()
 {
     m_installs = HomeCatalog::scanInstalled(m_settings.plutoniumInstance);
+    const int scroll = m_scroll->verticalScrollBar()->value();
     rebuildContent();
+    QTimer::singleShot(0, this, [this, scroll]() { m_scroll->verticalScrollBar()->setValue(scroll); });
 }
 
 void HomePage::rebuildFilters()
 {
-    for (QHBoxLayout *row : {m_filterLayout, m_hubLayout}) {
-        while (QLayoutItem *it = row->takeAt(0)) {
-            delete it->widget();
-            delete it;
-        }
+    while (QLayoutItem *it = m_filterLayout->takeAt(0)) {
+        delete it->widget();
+        delete it;
     }
     m_filterButtons.clear();
 
-    auto addLabel = [this](QHBoxLayout *row, const QString &text) {
-        auto *label = new QLabel(text, m_filterBar);
-        label->setObjectName("ChipRowLabel");
-        label->setMinimumWidth(52);
-        row->addWidget(label);
-    };
-    auto addChip = [this](QHBoxLayout *row, const QString &id, const QString &label) {
+    auto addChip = [this](const QString &id, const QString &label) {
         auto *btn = new QPushButton(label, m_filterBar);
         btn->setObjectName("GameChip");
         btn->setCheckable(true);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setProperty("gameId", id);
-        connect(btn, &QPushButton::clicked, this, [this, id]() { togglePick(id); });
-        row->addWidget(btn);
+        connect(btn, &QPushButton::clicked, this, [this, id]() { selectGame(id); });
+        m_filterLayout->addWidget(btn);
         m_filterButtons << btn;
     };
-
-    addLabel(m_filterLayout, tr("Games"));
-    addChip(m_filterLayout, QStringLiteral("all"), tr("Everything"));
+    addChip(QString(), tr("All games"));
     for (const HomeCatalog::Game &g : m_catalog.games)
-        addChip(m_filterLayout, g.id, g.name);
+        addChip(g.id, g.name);
     m_filterLayout->addStretch(1);
-    for (const QString &hub : m_catalog.hubs) {
-        const HomeCatalog::Mod *m = HomeCatalog::findMod(m_catalog, hub);
-        if (!m)
-            continue;
-        if (m_hubLayout->isEmpty())
-            addLabel(m_hubLayout, tr("Mods"));
-        addChip(m_hubLayout, m->id, m->name);
-    }
-    if (!m_hubLayout->isEmpty())
-        m_hubLayout->addStretch(1);
 
-    // Drop picks the new catalog no longer has.
-    QSet<QString> known;
-    for (QPushButton *b : m_filterButtons)
-        known.insert(b->property("gameId").toString());
-    m_picked.intersect(known);
+    if (!m_game.isEmpty() && !HomeCatalog::findGame(m_catalog, m_game))
+        m_game.clear();
     syncChips();
 }
 
+// Texture and sound packs exist for World at War, Black Ops and Black Ops II
+// only, and Plutonium add-ons have no categories, so the category row follows
+// the game.
 void HomePage::syncChips()
 {
-    for (QPushButton *b : m_filterButtons) {
-        const QString id = b->property("gameId").toString();
-        b->setChecked(id == QLatin1String("all") ? m_picked.isEmpty() : m_picked.contains(id));
-    }
-}
+    for (QPushButton *b : m_filterButtons)
+        b->setChecked(b->property("gameId").toString() == m_game);
 
-void HomePage::togglePick(const QString &id)
-{
-    if (id == QLatin1String("all"))
-        m_picked.clear();
-    else if (!m_picked.remove(id))
-        m_picked.insert(id);
-    syncChips();
-    rebuildContent();
+    const bool plutonium = m_game == QLatin1String("plutonium");
+    const bool packs = m_game.isEmpty() || m_game == QLatin1String("t4") || m_game == QLatin1String("t5")
+        || m_game == QLatin1String("t6");
+    QList<QPushButton *> shown;
+    for (QPushButton *b : m_typeButtons) {
+        const QString id = b->property("typeId").toString();
+        const bool show = !plutonium
+            && (packs || (id != QLatin1String("texture") && id != QLatin1String("sound")));
+        b->setVisible(show);
+        if (show)
+            shown << b;
+    }
+    bool typeShown = false;
+    for (QPushButton *b : shown)
+        typeShown |= b->property("typeId").toString() == m_type;
+    if (!typeShown)
+        m_type = QStringLiteral("all");
+    for (QPushButton *b : m_typeButtons) {
+        const char *segment = b == shown.value(0) ? "left" : (b == shown.value(shown.size() - 1) ? "right" : "");
+        if (b->property("segment").toString() != QLatin1String(segment)) {
+            b->setProperty("segment", segment);
+            b->style()->unpolish(b);
+            b->style()->polish(b);
+        }
+        b->setChecked(b->property("typeId").toString() == m_type);
+    }
+    // Scripts are made for games, not for Plutonium.
+    m_addScriptBtn->setVisible(!plutonium);
+    m_shareBtn->setVisible(!plutonium);
 }
 
 void HomePage::selectGame(const QString &gameId)
 {
-    m_picked.clear();
-    if (!gameId.isEmpty() && gameId != QLatin1String("all"))
-        m_picked.insert(gameId);
+    m_game = gameId == QLatin1String("all") ? QString() : gameId;
     syncChips();
     rebuildContent();
+    m_scroll->verticalScrollBar()->setValue(0);
 }
 
 void HomePage::setType(const QString &type)
 {
     m_type = type;
-    for (QPushButton *b : m_typeButtons)
-        b->setChecked(b->property("typeId").toString() == m_type);
+    syncChips();
     rebuildContent();
+    m_scroll->verticalScrollBar()->setValue(0);
 }
 
-// Chips add up: Black Ops II + Quality of Life shows every T6 item, and
-// Quality of Life alone shows the mod and the scripts made for it.
 bool HomePage::matchesFilters(const HomeCatalog::Mod &m) const
 {
-    if (m_type == QLatin1String("mod") && m.isScript())
+    if (m_type != QLatin1String("all") && categoryOf(m) != m_type)
         return false;
-    if (m_type == QLatin1String("script") && !m.isScript())
-        return false;
-    if (!m_picked.isEmpty() && !m_picked.contains(m.game) && !m_picked.contains(m.id)
-        && (m.forMod.isEmpty() || !m_picked.contains(m.forMod)))
+    if (!m_game.isEmpty() && m.game != m_game)
         return false;
     if (!m_query.isEmpty()) {
         const HomeCatalog::Game *g = HomeCatalog::findGame(m_catalog, m.game);
         const HomeCatalog::Mod *hub = m.forMod.isEmpty() ? nullptr : HomeCatalog::findMod(m_catalog, m.forMod);
-        const QString hay = QStringList{m.name, m.author, m.summary, m.tags.join(' '),
+        const QString hay = QStringList{m.name, m.author, m.summary, m.tags.join(' '), badgeFor(m),
                                         g ? g->name : QString(), hub ? hub->name : QString()}
                                 .join(' ');
         if (!hay.contains(m_query, Qt::CaseInsensitive))
@@ -1003,23 +1072,88 @@ bool HomePage::matchesFilters(const HomeCatalog::Mod &m) const
     return true;
 }
 
+// Matching items for one game ("" = all), in the order the sort box asks for.
 QList<HomeCatalog::Mod> HomePage::filteredMods(const QString &gameId) const
 {
     QList<HomeCatalog::Mod> out;
     for (const HomeCatalog::Mod &m : m_catalog.mods)
         if ((gameId.isEmpty() || m.game == gameId) && matchesFilters(m))
             out << m;
+
+    const QString sort = m_sort ? m_sort->currentData().toString() : QString();
+    if (sort == QLatin1String("name")) {
+        std::stable_sort(out.begin(), out.end(), [](const HomeCatalog::Mod &a, const HomeCatalog::Mod &b) {
+            return a.name.localeAwareCompare(b.name) < 0;
+        });
+    } else if (sort == QLatin1String("installed")) {
+        QHash<QString, bool> have;
+        for (const HomeCatalog::Mod &m : out)
+            have.insert(m.id, presenceOf(m) != HomeCatalog::Presence::Missing);
+        std::stable_sort(out.begin(), out.end(), [&have](const HomeCatalog::Mod &a, const HomeCatalog::Mod &b) {
+            return have.value(a.id) && !have.value(b.id);
+        });
+    } else {
+        // Featured items first, then the catalog's own order.
+        const QStringList &featured = m_catalog.featured;
+        auto rank = [&featured](const HomeCatalog::Mod &m) {
+            const int i = int(featured.indexOf(m.id));
+            return i < 0 ? int(featured.size()) : i;
+        };
+        std::stable_sort(out.begin(), out.end(), [&rank](const HomeCatalog::Mod &a, const HomeCatalog::Mod &b) {
+            return rank(a) < rank(b);
+        });
+    }
     return out;
 }
 
 HomeCatalog::Presence HomePage::presenceOf(const HomeCatalog::Mod &m) const
 {
+    if (WorkshopItems::handles(m))
+        return WorkshopItems::presence(m_settings, m);
     if (!m.isScript())
         return HomeCatalog::presenceOf(m, m_installs);
     const QString dir = scriptDir(m);
     return !dir.isEmpty() && QFileInfo::exists(dir + QLatin1Char('/') + QFileInfo(m.file).fileName())
         ? HomeCatalog::Presence::Installed
         : HomeCatalog::Presence::Missing;
+}
+
+// Scripts install here, packs and add-ons through WorkshopItems, and other
+// mods through the Mods tab.
+void HomePage::installItem(const QString &modId)
+{
+    const HomeCatalog::Mod *m = HomeCatalog::findMod(m_catalog, modId);
+    if (!m) {
+        emit installRequested(modId);
+        return;
+    }
+    if (m->isScript()) {
+        installScript(modId);
+        return;
+    }
+    if (WorkshopItems::handles(*m)) {
+        WorkshopItems::install(this, m_settings, *m, [this]() {
+            refreshInstallState();
+            emit installedChanged();
+        });
+        return;
+    }
+    emit installRequested(modId);
+}
+
+void HomePage::removeItem(const QString &modId)
+{
+    const HomeCatalog::Mod *m = HomeCatalog::findMod(m_catalog, modId);
+    if (!m || !removableHere(*m))
+        return;
+    if (m->isScript()) {
+        removeScript(modId);
+        return;
+    }
+    WorkshopItems::remove(this, m_settings, {m->id, m->name, m->game, QString()}, [this]() {
+        refreshInstallState();
+        emit installedChanged();
+    });
 }
 
 // Where a catalog script goes. One made for a T6 mod goes inside that mod's
@@ -1068,9 +1202,8 @@ void HomePage::installScript(const QString &modId)
         showStatus(err.isEmpty()
                        ? tr("%1 installed. Plutonium loads it next time you start the game.").arg(title)
                        : err);
-        const int scroll = m_scroll->verticalScrollBar()->value();
-        rebuildContent();
-        QTimer::singleShot(0, this, [this, scroll]() { m_scroll->verticalScrollBar()->setValue(scroll); });
+        refreshInstallState();
+        emit installedChanged();
     };
 
     // Scripts that ship with the app install offline; community ones download.
@@ -1104,9 +1237,8 @@ void HomePage::removeScript(const QString &modId)
         return;
     const QString err = ScriptStore::remove(dir + QLatin1Char('/') + QFileInfo(m->file).fileName());
     showStatus(err.isEmpty() ? tr("%1 moved to the Recycle Bin.").arg(m->name) : err);
-    const int scroll = m_scroll->verticalScrollBar()->value();
-    rebuildContent();
-    QTimer::singleShot(0, this, [this, scroll]() { m_scroll->verticalScrollBar()->setValue(scroll); });
+    refreshInstallState();
+    emit installedChanged();
 }
 
 void HomePage::addLocalScript()
@@ -1115,12 +1247,7 @@ void HomePage::addLocalScript()
                                                       tr("GSC scripts (*.gsc *.csc)"));
     if (file.isEmpty())
         return;
-    QString game = QStringLiteral("t6");
-    for (const HomeCatalog::Game &g : m_catalog.games)
-        if (m_picked.contains(g.id)) {
-            game = g.id;
-            break;
-        }
+    const QString game = m_game.isEmpty() || m_game == QLatin1String("plutonium") ? QStringLiteral("t6") : m_game;
     const QString path = ScriptStore::importWithDialog(this, m_settings.plutoniumInstance, file, game);
     if (!path.isEmpty())
         showStatus(tr("Added %1.").arg(QDir::toNativeSeparators(path)));
@@ -1195,28 +1322,50 @@ void HomePage::rebuildContent()
         return;
     }
 
-    // secoes por jogo (ou uma unica secao de resultados)
-    struct SectionDef { QString id; QString name; QString logo; QList<HomeCatalog::Mod> mods; };
+    // A search shows one list of results. Otherwise "All games" shows a row
+    // per game, one game shows a row per category, and a game plus a category
+    // shows all of it. Rows stop after kSectionRows lines and offer "See all".
+    struct SectionDef {
+        QString title;
+        QString logo;
+        QList<HomeCatalog::Mod> mods;
+        std::function<void()> seeAll; // empty: the section shows everything
+    };
+    const HomeCatalog::Game *game = HomeCatalog::findGame(m_catalog, m_game);
+    const QString gameName = game ? game->name : QString();
     QList<SectionDef> sections;
     if (!m_query.isEmpty()) {
-        SectionDef s;
-        s.id = QString();
         const QList<HomeCatalog::Mod> found = filteredMods(QString());
-        s.name = tr("%n resultado(s) para \"%1\"", "", int(found.size())).arg(m_query);
-        s.mods = found;
-        sections << s;
-    } else {
+        if (!found.isEmpty())
+            sections << SectionDef{found.size() == 1 ? tr("1 result for \"%1\"").arg(m_query)
+                                                     : tr("%1 results for \"%2\"").arg(found.size()).arg(m_query),
+                                   QString(), found, {}};
+    } else if (m_game.isEmpty()) {
         for (const HomeCatalog::Game &g : m_catalog.games) {
-            SectionDef s;
-            s.id = g.id;
-            s.name = g.name;
-            s.logo = g.logo;
-            s.mods = filteredMods(g.id);
-            if (!s.mods.isEmpty())
-                sections << s;
+            const QList<HomeCatalog::Mod> mods = filteredMods(g.id);
+            if (!mods.isEmpty())
+                sections << SectionDef{g.name, g.logo, mods, [this, id = g.id]() { selectGame(id); }};
         }
+    } else if (m_type == QLatin1String("all") && m_game != QLatin1String("plutonium")) {
+        const QList<HomeCatalog::Mod> mods = filteredMods(m_game);
+        for (const QString &cat : {QStringLiteral("mod"), QStringLiteral("script"), QStringLiteral("texture"),
+                                   QStringLiteral("sound")}) {
+            QList<HomeCatalog::Mod> in;
+            for (const HomeCatalog::Mod &m : mods)
+                if (categoryOf(m) == cat)
+                    in << m;
+            if (!in.isEmpty())
+                sections << SectionDef{categoryName(cat), QString(), in, [this, cat]() { setType(cat); }};
+        }
+    } else {
+        const QList<HomeCatalog::Mod> mods = filteredMods(m_game);
+        if (!mods.isEmpty())
+            sections << SectionDef{m_type == QLatin1String("all") ? gameName : categoryName(m_type),
+                                   game ? game->logo : QString(), mods, {}};
     }
 
+    m_columns = columnCount();
+    const int cap = m_columns * kSectionRows;
     for (const SectionDef &def : sections) {
         auto *section = new QWidget(m_content);
         auto *sv = new QVBoxLayout(section);
@@ -1236,29 +1385,21 @@ void HomePage::rebuildContent()
             if (logo.isNull() && HomeCatalog::isRemote(def.logo))
                 requestRemote(def.logo, QString());
         }
-        auto *name = new QLabel(def.name, section);
+        auto *name = new QLabel(def.title, section);
         name->setObjectName("SectionTitle");
         head->addWidget(name);
-        int scripts = 0;
-        for (const HomeCatalog::Mod &m : def.mods)
-            scripts += m.isScript() ? 1 : 0;
-        QStringList counts;
-        if (def.mods.size() > scripts)
-            counts << tr("%n mod(s)", "", int(def.mods.size() - scripts));
-        if (scripts)
-            counts << tr("%n script(s)", "", scripts);
-        auto *count = new QLabel(counts.join(QStringLiteral("  ·  ")), section);
-        count->setObjectName("MutedHint");
-        head->addWidget(count);
+        if (!m_query.isEmpty() || def.seeAll) {
+            auto *count = new QLabel(itemCount(int(def.mods.size())), section);
+            count->setObjectName("MutedHint");
+            head->addWidget(count);
+        }
         head->addStretch(1);
-        if (!def.id.isEmpty()) {
-            auto *all = new QPushButton(tr("Ver todos"), section);
+        const bool capped = def.seeAll && def.mods.size() > cap;
+        if (capped) {
+            auto *all = new QPushButton(tr("See all"), section);
             all->setProperty("cssClass", "ghost");
             all->setCursor(Qt::PointingHandCursor);
-            connect(all, &QPushButton::clicked, this, [this, id = def.id]() {
-                selectGame(id);
-                emit gameRequested(id);
-            });
+            connect(all, &QPushButton::clicked, this, def.seeAll);
             head->addWidget(all);
         }
         sv->addLayout(head);
@@ -1272,18 +1413,16 @@ void HomePage::rebuildContent()
         grid->setHorizontalSpacing(14);
         grid->setVerticalSpacing(14);
         grid->setProperty("isCardGrid", true);
-        for (const HomeCatalog::Mod &m : def.mods) {
+        const int shown = capped ? cap : int(def.mods.size());
+        for (int i = 0; i < shown; ++i) {
+            const HomeCatalog::Mod &m = def.mods[i];
             const HomeCatalog::Game *g = HomeCatalog::findGame(m_catalog, m.game);
             const HomeCatalog::Mod *hub = m.forMod.isEmpty() ? nullptr : HomeCatalog::findMod(m_catalog, m.forMod);
             auto *card = new ModCard(m, g ? g->name : m.game, g ? g->code : m.game.toUpper(),
                                     presenceOf(m), hub ? hub->name : QString(), section);
             card->onClick = [this](const QString &id) { openDetails(id); };
             card->onAction = [this](const QString &id, bool remove) {
-                const HomeCatalog::Mod *it = HomeCatalog::findMod(m_catalog, id);
-                if (it && it->isScript())
-                    remove ? removeScript(id) : installScript(id);
-                else
-                    emit installRequested(id);
+                remove ? removeItem(id) : installItem(id);
             };
             const QPixmap cover = resolvedCover(m.image);
             if (!cover.isNull())
@@ -1297,9 +1436,18 @@ void HomePage::rebuildContent()
     }
 
     if (sections.isEmpty()) {
-        auto *empty = new QLabel(m_query.isEmpty() ? tr("Nenhum mod no catalogo.")
-                                                   : tr("Nenhum mod encontrado para essa busca."),
-                                 m_content);
+        QString text;
+        if (!m_query.isEmpty())
+            text = tr("Nothing matches \"%1\".").arg(m_query);
+        else if (m_type != QLatin1String("all") && !gameName.isEmpty())
+            text = tr("No %1 for %2 yet.").arg(categoryName(m_type).toLower(), gameName);
+        else if (m_type != QLatin1String("all"))
+            text = tr("No %1 yet.").arg(categoryName(m_type).toLower());
+        else if (!gameName.isEmpty())
+            text = tr("Nothing for %1 yet.").arg(gameName);
+        else
+            text = tr("The Workshop is empty.");
+        auto *empty = new QLabel(text, m_content);
         empty->setObjectName("MutedHint");
         empty->setAlignment(Qt::AlignCenter);
         empty->setMinimumHeight(160);
@@ -1310,10 +1458,15 @@ void HomePage::rebuildContent()
     relayoutGrids();
 }
 
-void HomePage::relayoutGrids()
+int HomePage::columnCount() const
 {
     const int available = (m_scroll ? m_scroll->viewport()->width() : width()) - 56;
-    const int columns = qMax(2, (available + 14) / (kCardMinWidth + 14));
+    return qMax(2, (available + 14) / (kCardMinWidth + 14));
+}
+
+void HomePage::relayoutGrids()
+{
+    const int columns = columnCount();
 
     for (QGridLayout *grid : m_content->findChildren<QGridLayout *>()) {
         if (!grid->property("isCardGrid").toBool())
@@ -1351,11 +1504,9 @@ void HomePage::openDetails(const QString &modId)
     const int result = dlg.exec();
     m_hero->setAutoplay(true);
     if (result == ModDetailsDialog::kRemove)
-        removeScript(modId);
-    else if (result == QDialog::Accepted && script)
-        installScript(modId);
+        removeItem(modId);
     else if (result == QDialog::Accepted)
-        emit installRequested(modId);
+        installItem(modId);
 }
 
 QPixmap HomePage::resolvedCover(const QString &ref) const
@@ -1441,7 +1592,20 @@ void HomePage::resizeEvent(QResizeEvent *event)
     QWidget::resizeEvent(event);
     if (m_hero)
         m_hero->setFixedHeight(qBound(280, int(width() * 0.34), 420));
-    relayoutGrids();
+}
+
+// The card columns follow the scroll viewport, which gets its real width only
+// after the page is shown. A capped section holds two lines of cards, so a
+// new column count needs the sections built again, not just re-flowed.
+bool HomePage::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::Resize && m_scroll && watched == m_scroll->viewport()) {
+        if (m_columns && columnCount() != m_columns)
+            m_relayout.start();
+        else
+            relayoutGrids();
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void HomePage::retranslate()
@@ -1455,12 +1619,15 @@ void HomePage::retranslate()
 
 void HomePage::retranslateBar()
 {
-    m_search->setPlaceholderText(tr("Search mods, scripts, authors…"));
-    const QStringList labels = {tr("Everything"), tr("Mods"), tr("Scripts")};
-    for (int i = 0; i < m_typeButtons.size() && i < labels.size(); ++i) {
-        m_typeButtons[i]->setText(labels[i]);
-        m_typeButtons[i]->setChecked(m_typeButtons[i]->property("typeId").toString() == m_type);
+    m_search->setPlaceholderText(tr("Search mods, scripts, packs, authors…"));
+    for (QPushButton *b : m_typeButtons) {
+        const QString id = b->property("typeId").toString();
+        b->setText(id == QLatin1String("all") ? tr("Everything") : categoryName(id));
     }
+    m_sortLabel->setText(tr("Sort by"));
+    const QStringList sorts = {tr("Recommended"), tr("Name"), tr("Installed first")};
+    for (int i = 0; i < m_sort->count() && i < sorts.size(); ++i)
+        m_sort->setItemText(i, sorts[i]);
     m_addScriptBtn->setText(tr("Add a script"));
     m_addScriptBtn->setToolTip(tr("Copy a .gsc file from your PC into the right Plutonium folder."));
     m_shareBtn->setText(tr("Share a script"));

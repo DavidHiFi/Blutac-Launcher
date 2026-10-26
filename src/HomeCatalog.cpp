@@ -119,8 +119,8 @@ Catalog parseCatalog(const QByteArray &raw, QString &error)
 
     const QJsonObject root = doc.object();
     c.title = root.value("title").toString();
+    c.updated = root.value("updated").toString();
     c.featured = toStringList(root.value("featured"));
-    c.hubs = toStringList(root.value("hubs"));
 
     for (const QJsonValue &v : root.value("games").toArray()) {
         const QJsonObject o = v.toObject();
@@ -142,6 +142,15 @@ Catalog parseCatalog(const QByteArray &raw, QString &error)
         QJsonObject o = v.toObject();
         o.insert(QStringLiteral("type"), QStringLiteral("script"));
         entries.append(o);
+    }
+    // Texture packs, sound packs and Plutonium add-ons sit in "packs" for the
+    // same reason. A type this build does not know is left out.
+    for (const QJsonValue &v : root.value("packs").toArray()) {
+        const QJsonObject o = v.toObject();
+        const QString type = o.value("type").toString();
+        if (type == QLatin1String("texture") || type == QLatin1String("sound")
+            || type == QLatin1String("plutonium"))
+            entries.append(o);
     }
     for (const QJsonValue &v : entries) {
         const QJsonObject o = v.toObject();
@@ -168,9 +177,20 @@ Catalog parseCatalog(const QByteArray &raw, QString &error)
         m.folder = o.value("folder").toString();
         if (m.isScript() && m.file.isEmpty())
             continue;
+        if (m.isPlutonium())
+            m.game = QStringLiteral("plutonium");
         if (!m.id.isEmpty())
             c.mods << m;
     }
+    // Plutonium is not a game, but its add-ons are browsed like one. It is
+    // made up here rather than listed in "games", which 2.3.0 would show as a
+    // fifth game with nothing to launch.
+    for (const Mod &m : c.mods)
+        if (m.isPlutonium()) {
+            c.games << Game{QStringLiteral("plutonium"), QStringLiteral("PLUTO"),
+                            QStringLiteral("Plutonium"), {}, {}, {}};
+            break;
+        }
     c.ok = true;
     return c;
 }
@@ -197,6 +217,22 @@ void saveCatalogCache(const QByteArray &raw)
         f.write(raw);
 }
 
+// The copy built into the exe when it is newer than `c`, or `c` failed. A
+// download or cache from before an update can lack what this build installs
+// (the packs and add-ons only the Workshop offers now).
+static Catalog newerOfBuiltIn(const Catalog &c)
+{
+    QFile builtIn(QStringLiteral(":/qol_home.json"));
+    if (!builtIn.open(QIODevice::ReadOnly))
+        return c;
+    QString e;
+    Catalog own = parseCatalog(builtIn.readAll(), e);
+    if (!own.ok || (c.ok && c.updated >= own.updated))
+        return c;
+    own.fromCache = c.fromCache || !c.ok;   // a fresh download stays "fresh"
+    return own;
+}
+
 Catalog load(const QString &path)
 {
     Catalog c;
@@ -221,23 +257,13 @@ Catalog load(const QString &path)
         c = parseCatalog(raw, parseError);
         if (c.ok) {
             saveCatalogCache(raw);
-            return c;
+            return newerOfBuiltIn(c);
         }
         netError = parseError;
     }
 
     QString cacheError;
-    Catalog cached = loadFromCacheFile(cacheError);
-    if (!cached.ok) {
-        // Never downloaded: fall back to the copy built into the exe.
-        QFile builtIn(QStringLiteral(":/qol_home.json"));
-        if (builtIn.open(QIODevice::ReadOnly)) {
-            QString e;
-            cached = parseCatalog(builtIn.readAll(), e);
-            if (cached.ok)
-                cached.fromCache = true;
-        }
-    }
+    Catalog cached = newerOfBuiltIn(loadFromCacheFile(cacheError));
     if (cached.ok) {
         cached.error = netError.isEmpty()
                            ? QObject::tr("Showing the last downloaded catalog.")

@@ -22,6 +22,7 @@ Palette base()
     Palette p;
     p["FONT"]        = "\"Inter\", \"Segoe UI\", sans-serif";
     p["CHECK_ICON"]  = ":/icons/check.svg";
+    p["ARROW_ICON"]  = ":/icons/chevron_down.svg";
     p["R"]           = "8px";
     p["R_SM"]        = "6px";
     p["R_XS"]        = "5px";
@@ -155,6 +156,7 @@ Palette classicLight()
 {
     Palette p = classicDark();
     p["CHECK_ICON"]    = ":/icons/check_light.svg";
+    p["ARROW_ICON"]    = ":/icons/chevron_down_dark.svg";
     p["BG"]            = "#ecebe7";
     p["BG_DEEP"]       = "#dddbd5";
     p["HEADER_TOP"]    = "#f7f6f3";
@@ -498,6 +500,7 @@ Palette theme_latte()
 {
     Palette p = base();
     p["CHECK_ICON"]    = ":/icons/check_light.svg";
+    p["ARROW_ICON"]    = ":/icons/chevron_down_dark.svg";
     p["BG"              ] = "#EFF1F5";
     p["BG_DEEP"         ] = "#DCE0E8";
     p["HEADER_TOP"      ] = "#eff1f5";
@@ -613,6 +616,7 @@ Palette theme_t3_chat_light()
 {
     Palette p = base();
     p["CHECK_ICON"]    = ":/icons/check_light.svg";
+    p["ARROW_ICON"]    = ":/icons/chevron_down_dark.svg";
     p["BG"              ] = "#FDF7FD";
     p["BG_DEEP"         ] = "#F3EDF3";
     p["HEADER_TOP"      ] = "#fdf7fd";

@@ -16,7 +16,7 @@
 
 #include "pages/PlayPage.h"
 #include "pages/HomePage.h"
-#include "pages/QolPage.h"
+#include "pages/BackupsPage.h"
 #include "QolService.h"
 #include "pages/ModsPage.h"
 #include "pages/ServerPage.h"
@@ -43,6 +43,7 @@
 #include <QDir>
 #include <QProcess>
 #include <QResizeEvent>
+#include <QTimer>
 #include <QtConcurrent/QtConcurrent>
 
 namespace {
@@ -121,6 +122,12 @@ MainWindow::MainWindow(QWidget *parent)
     // keeps restoring files by the rules of the script version it loaded. Take
     // it down before anything in this session decides what bin should hold.
     GameLauncher::stopReShadeWatchdog();
+    // And a LAN session that ended while the app was closed (or crashed) left
+    // the add-on build in bin. No game running means nothing needs it now.
+    if (QolService::runningGame().isEmpty()) {
+        QString ignored;
+        QolService::leaveLanState(m_settings, ignored);
+    }
 
     if (!m_settings.setupCompleted) {
         SetupWizard wizard(m_settings, nullptr);
@@ -147,14 +154,14 @@ MainWindow::MainWindow(QWidget *parent)
     m_stack = new QStackedWidget(this);
     m_playPage = new PlayPage(m_settings, this);
     m_homePage = new HomePage(m_settings, this);
-    m_qolPage = new QolPage(m_settings, this);
+    m_backupsPage = new BackupsPage(m_settings, this);
     m_modsPage = new ModsPage(m_settings, this);
     m_serverPage = new ServerPage(m_settings, this);
     m_settingsPage = new SettingsPage(m_settings, this);
     m_aboutPage = new AboutPage(this);
     m_stack->addWidget(m_playPage);
     m_stack->addWidget(m_homePage);
-    m_stack->addWidget(m_qolPage);
+    m_stack->addWidget(m_backupsPage);
     m_stack->addWidget(m_modsPage);
     m_stack->addWidget(m_serverPage);
     m_stack->addWidget(m_settingsPage);
@@ -197,27 +204,22 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(m_homePage, &HomePage::installRequested, this, [this](const QString &modId) {
-        // Series mods ship plain release zips, not a CLL manifest: the
-        // Quality of Life page owns those installs.
-        for (const QolService::SeriesMod &sm : QolService::series()) {
-            if (sm.released && modId == QStringLiteral("%1-quality-of-life").arg(sm.gameCode)) {
-                showTool(ToolQol);
-                m_qolPage->installSeriesMod(sm.gameCode);
-                return;
-            }
-        }
         showTool(ToolMods);
         if (!modId.isEmpty())
             m_modsPage->installFromCatalog(modId);
     });
-    connect(m_homePage, &HomePage::gameRequested, this, [this](const QString &gameId) {
-        m_modsPage->selectGame(gameId);
-        m_homePage->selectGame(gameId);
-    });
     connect(m_playPage, &PlayPage::launchRequested, this, &MainWindow::onLaunchGame);
     connect(m_playPage, &PlayPage::launchOnlineRequested, this, &MainWindow::onLaunchOnline);
-    connect(m_qolPage, &QolPage::installedChanged, this, [this]() {
+    // The Workshop installs packs, add-ons, scripts and the QoL mods itself, so
+    // the pages that list or launch them catch up here.
+    connect(m_homePage, &HomePage::installedChanged, this, [this]() {
         m_modsPage->refreshList();
+        m_playPage->syncLaunchOptions();
+        m_backupsPage->refresh();
+    });
+    connect(m_backupsPage, &BackupsPage::installedChanged, this, [this]() {
+        m_modsPage->refreshList();
+        m_playPage->syncLaunchOptions();
         if (m_homePage)
             m_homePage->refreshInstallState();
     });
@@ -228,10 +230,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_modsPage, &ModsPage::catalogChanged, this, [this]() {
         if (m_homePage)
             m_homePage->refreshInstallState();
+        m_playPage->syncLaunchOptions();
+        m_backupsPage->refresh();
     });
     connect(m_settingsPage, &SettingsPage::plutoniumFolderChanged, this, [this]() {
         m_modsPage->refreshList();
-        m_qolPage->refresh();
+        m_backupsPage->refresh();
         m_serverPage->refreshList();
         if (m_homePage)
             m_homePage->refreshInstallState();
@@ -322,11 +326,11 @@ void MainWindow::retranslate()
     if (m_saveBtn)
         m_saveBtn->setText(tr("Salvar"));
     const QStringList tools = {
-        tr("Game Configuration"), tr("Mods"), tr("Servidor LAN (beta)"), tr("Configuracoes"), tr("Sobre")
+        tr("Backups"), tr("Mods"), tr("Servidor LAN (beta)"), tr("Configuracoes"), tr("Sobre")
     };
     for (int i = 0; i < m_toolButtons.size() && i < tools.size(); ++i)
         m_toolButtons[i]->setText("  " + tools[i]);
-    if (m_qolPage) m_qolPage->retranslate();
+    if (m_backupsPage) m_backupsPage->retranslate();
     DownloadCenter::instance()->retranslate();
     applyHeader(m_toolIndex);
     if (m_homeNavBtn) m_homeNavBtn->setText("  " + tr("Início"));
@@ -489,7 +493,7 @@ QWidget *MainWindow::buildSidebar()
 
     struct Tool { QString text; QString icon; };
     const QList<Tool> tools = {
-        {tr("Game Configuration"), ":/icons/qol.svg"},
+        {tr("Backups"), ":/icons/backup.svg"},
         {tr("Mods"), ":/icons/mods.svg"},
         {tr("Servidor LAN (beta)"), ":/icons/server.svg"},
         {tr("Configuracoes"), ":/icons/misc.svg"},
@@ -584,8 +588,8 @@ void MainWindow::applyHeader(int toolIndex)
     case ToolHome:
         info = {tr("Início"), tr("Descubra mods e mapas por jogo."), false};
         break;
-    case ToolQol:
-        info = {tr("Game Configuration"), tr("The series: install, update and remove each game's mod and its extras."), false};
+    case ToolBackups:
+        info = {tr("Backups"), tr("Copies of your own files for each game, ready to put back."), false};
         break;
     case ToolMods:
         info = {tr("Mods"), tr("Instale pacotes e mapas customizados por jogo."), false};
@@ -633,6 +637,12 @@ void MainWindow::applyHomeVisibility()
         selectGame(m_gameIndex);
 }
 
+void MainWindow::debugWorkshopGame(const QString &gameId)
+{
+    showTool(ToolHome);
+    m_homePage->selectGame(gameId);
+}
+
 void MainWindow::showTool(int toolIndex)
 {
     if (toolIndex == ToolHome && !m_settings.homeEnabled) {
@@ -643,8 +653,8 @@ void MainWindow::showTool(int toolIndex)
     const QString gameId = (m_gameIndex >= 0 && m_gameIndex < m_gameButtons.size())
                                ? m_gameButtons[m_gameIndex]->property("gameId").toString()
                                : QString();
-    if (toolIndex == ToolQol)
-        m_qolPage->refresh();
+    if (toolIndex == ToolBackups)
+        m_backupsPage->refresh();
     else if (toolIndex == ToolMods)
         m_modsPage->selectGame(gameId);
     else if (toolIndex == ToolServer)
@@ -670,25 +680,56 @@ void MainWindow::syncNav()
 // a watchdog: ticked means ReShade is there and is the right build for where
 // you are playing, unticked means it is gone. Both are made true here, before
 // the game starts, because bin cannot be written once it is running.
-void MainWindow::prepareReShade(QolService::ReShadeMode mode, bool wantDlss)
+bool MainWindow::prepareReShade(QolService::ReShadeMode mode, bool wantDlss)
 {
+    GameLauncher::stopReShadeWatchdog();
     QString err;
     if (!m_settings.launchReShade) {
-        if (!QolService::ensureReShadeAbsent(m_settings, err) && !err.isEmpty())
+        if (!QolService::ensureReShadeAbsent(m_settings, err)) {
             Dialogs::error(this, err);
-        return;
+            return false;
+        }
+        return true;
     }
-    if (!QolService::applyReShadeMode(m_settings, mode, wantDlss, err) && !err.isEmpty())
+    if (!QolService::applyReShadeMode(m_settings, mode, wantDlss, err)) {
         Dialogs::error(this, err);
+        return false;
+    }
+    return true;
 }
 
-void MainWindow::startReShadeWatchdogIfWanted()
+// A LAN session is over. The add-on build, the feeder and the DLSS helper
+// come back out of bin now rather than at the next online launch, so nothing
+// between sessions - Plutonium's own launcher, a Play button in another tool
+// - can ever start an online game on top of them. The helper outlives the
+// game by a few seconds and holds host64\ open meanwhile, so this retries
+// until it has gone. A game still running (a second copy the user started)
+// leaves bin as it is; the next launch from here makes it right either way.
+void MainWindow::afterSessionEnded(int attempt)
+{
+    if (attempt == 0) {
+        if (QolService::activeReShadeMode(m_settings) == QolService::ReShadeMode::Lan)
+            QTimer::singleShot(1500, this, [this]() { afterSessionEnded(1); });
+        return;
+    }
+    if (m_runningPid > 0)
+        return;                      // a new session started meanwhile; it owns bin now
+    QString err;
+    if (QolService::leaveLanState(m_settings, err) || attempt >= 15)
+        return;
+    QTimer::singleShot(2000, this, [this, attempt]() { afterSessionEnded(attempt + 1); });
+}
+
+bool MainWindow::startReShadeWatchdogIfWanted()
 {
     if (!m_settings.launchReShade)
-        return;
+        return true;
     QString err;
-    if (!GameLauncher::startReShadeWatchdog(m_settings.plutoniumInstance, err))
+    if (!GameLauncher::startReShadeWatchdog(m_settings.plutoniumInstance, err)) {
         Dialogs::error(this, err);
+        return false;
+    }
+    return true;
 }
 
 void MainWindow::onLaunchGame(const QString &gameId, const QString &mode)
@@ -715,18 +756,26 @@ void MainWindow::onLaunchGame(const QString &gameId, const QString &mode)
     // LAN is not signed in to anything, so it gets the add-on build of ReShade
     // and, on Black Ops II, DLSS 5 with it. This has to happen before the game
     // starts: once the bootstrapper has dxgi.dll open it cannot be replaced.
-    prepareReShade(QolService::ReShadeMode::Lan,
-                   m_settings.launchDlss5 && gameId == QLatin1String("Black ops II"));
+    // A saved "DLSS on" with no payload behind it (removed by hand, or a
+    // Remove from another copy of the app) plays without DLSS rather than not
+    // at all: the tick box is hidden then, so it could not be unticked.
+    const bool wantDlss = m_settings.launchDlss5 && gameId == QLatin1String("Black ops II")
+                          && QolService::dlssPayloadReady(m_settings);
+    if (!prepareReShade(QolService::ReShadeMode::Lan, wantDlss))
+        return;
+    if (!startReShadeWatchdogIfWanted())
+        return;
 
     const GameLauncher::Result result = GameLauncher::launch(m_settings, m_modsPage->selectedMod());
     if (result.hasError) {
+        GameLauncher::stopReShadeWatchdog();
+        afterSessionEnded();         // nothing started, so nothing may keep the LAN files
         if (!result.errorText.isEmpty())
             Dialogs::error(this, result.errorText);
         else
             Dialogs::info(this, result.errorMsg, m_settings);
         return;
     }
-    startReShadeWatchdogIfWanted();
     m_runningPid = result.pid;
     m_runningGameId = gameId;
     m_playPage->setRunning(true);
@@ -748,8 +797,8 @@ void MainWindow::onLaunchOnline(const QString &gameId, const QString &mode)
     // Online is signed in to Plutonium, so it gets the stock build and none of
     // the add-ons: the feeder, its 64-bit host and the DLSS entries in the
     // preset all come back out of bin before the session starts.
-    prepareReShade(QolService::ReShadeMode::Online, false);
-
+    // launchOnline does that itself and refuses to start the game if any of
+    // it is still there, so -nogui -online is held to the same rule.
     GameLauncher::Result result = GameLauncher::launchOnline(m_settings);
     if (result.needsLogin) {
         // No account signed in yet, or the saved one expired. Ask once, then
@@ -770,6 +819,8 @@ void MainWindow::onLaunchOnline(const QString &gameId, const QString &mode)
             Dialogs::info(this, result.errorMsg, m_settings);
         return;
     }
+    // Online restores from the base vault only (the marker says "online"), so
+    // this watchdog can never put the feeder back mid-session.
     startReShadeWatchdogIfWanted();
     // We started the bootstrapper ourselves, so the pid is ours to track: Stop
     // and the running state work exactly as they do for a LAN launch.
@@ -796,6 +847,7 @@ void MainWindow::onStopGame(const QString &)
     // The watchdog exists to serve a running game. Stopping the game closes
     // its window too - nobody has to go and find it afterwards.
     GameLauncher::stopReShadeWatchdog();
+    afterSessionEnded();
 }
 
 void MainWindow::onPollRunningProcess()
@@ -816,6 +868,7 @@ void MainWindow::onPollRunningProcess()
         m_playPage->setRunning(false);
         // The game closed on its own: close the watchdog window with it.
         GameLauncher::stopReShadeWatchdog();
+        afterSessionEnded();
     }
     if (m_serverPid > 0 && !GameLauncher::isPidRunning(m_serverPid)) {
         m_serverPid = 0;

@@ -3,6 +3,7 @@
 #include "../Checkables.h"
 #include "Dialogs.h"
 #include "Downloader.h"
+#include "GameCatalog.h"
 #include "MakeConfigDialog.h"
 #include "Storage.h"
 
@@ -113,8 +114,10 @@ ServerPage::ServerPage(AppSettings &settings, QWidget *parent)
     auto *contextRow = new QHBoxLayout();
     contextRow->setSpacing(8);
     m_gameCombo = new Ui::ComboBox(this);
-    m_gameCombo->addItems({"World at War", "Black ops", "Black ops II"});
-    m_gameCombo->setCurrentText("Black ops II");
+    // The item data is the settings id ("Black ops II"); the text is the title.
+    for (const QString &id : {"World at War", "Black ops", "Black ops II"})
+        m_gameCombo->addItem(GameCatalog::byId(id).title, id);
+    m_gameCombo->setCurrentIndex(m_gameCombo->findData(QStringLiteral("Black ops II")));
     m_gameCombo->setMinimumWidth(210);
     auto *refreshBtn = new QPushButton(tr("Atualizar"), this);
     refreshBtn->setObjectName("srvRefresh");
@@ -244,7 +247,8 @@ ServerPage::ServerPage(AppSettings &settings, QWidget *parent)
 
     refreshIpList();
 
-    connect(m_gameCombo, &QComboBox::currentTextChanged, this, &ServerPage::onGameSelected);
+    connect(m_gameCombo, &QComboBox::currentIndexChanged, this,
+            [this]() { onGameSelected(m_gameCombo->currentData().toString()); });
     connect(refreshBtn, &QPushButton::clicked, this, &ServerPage::onRefreshOrDeselect);
     connect(deselectBtn, &QPushButton::clicked, this, &ServerPage::onRefreshOrDeselect);
     connect(deleteBtn, &QPushButton::clicked, this, &ServerPage::onDeleteConfig);
@@ -274,17 +278,17 @@ ServerPage::ServerPage(AppSettings &settings, QWidget *parent)
         }
     });
 
-    onGameSelected(m_gameCombo->currentText());
+    onGameSelected(m_gameCombo->currentData().toString());
 }
 
 void ServerPage::selectGame(const QString &gameId)
 {
     if (gameId.isEmpty() || !m_gameCombo)
         return;
-    const int idx = m_gameCombo->findText(gameId);
+    const int idx = m_gameCombo->findData(gameId);
     if (idx >= 0)
         m_gameCombo->setCurrentIndex(idx);
-    onGameSelected(m_gameCombo->currentText());
+    onGameSelected(m_gameCombo->currentData().toString());
 }
 
 void ServerPage::showEvent(QShowEvent *event)
@@ -344,15 +348,15 @@ void ServerPage::onGameSelected(const QString &gameName)
     if (gameName.isEmpty())
         return;
     m_settings.serverId = gameName;
-    m_titleLabel->setText(tr("Configs disponiveis para %1").arg(gameName));
+    m_titleLabel->setText(tr("Configs disponiveis para %1").arg(GameCatalog::byId(gameName).title));
     refreshList();
 }
 
 void ServerPage::onRefreshOrDeselect()
 {
-    if (m_gameCombo->currentText().isEmpty())
+    if (m_gameCombo->currentData().toString().isEmpty())
         return;
-    m_settings.serverId = m_gameCombo->currentText();
+    m_settings.serverId = m_gameCombo->currentData().toString();
     refreshList();
 }
 
@@ -374,7 +378,7 @@ void ServerPage::onDeleteConfig()
 
 void ServerPage::onMakeConfig()
 {
-    const QString serverId = m_gameCombo->currentText();
+    const QString serverId = m_gameCombo->currentData().toString();
     if (serverId.isEmpty())
         return;
     m_settings.serverId = serverId;
@@ -625,7 +629,7 @@ void ServerPage::onLaunchServer()
         return;
     }
 
-    const QString serverId = m_gameCombo->currentText();
+    const QString serverId = m_gameCombo->currentData().toString();
     if (serverId.isEmpty())
         return;
     m_settings.serverId = serverId;
@@ -686,7 +690,7 @@ void ServerPage::retranslate()
         m_launchBtn->setText(m_running ? tr("Encerrar servidor") : tr("Iniciar servidor"));
     if (m_titleLabel) {
         if (!m_settings.serverId.isEmpty())
-            m_titleLabel->setText(tr("Configs disponiveis para %1").arg(m_settings.serverId));
+            m_titleLabel->setText(tr("Configs disponiveis para %1").arg(GameCatalog::byId(m_settings.serverId).title));
         else
             m_titleLabel->setText(tr("Selecione um jogo para ver as configs"));
     }

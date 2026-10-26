@@ -48,8 +48,9 @@ set(SOURCES
     src/SelfUpdate.cpp
     src/QolService.cpp
     src/QolBackups.cpp
+    src/WorkshopItems.cpp
     src/DownloadCenter.cpp
-    src/pages/QolPage.cpp
+    src/pages/BackupsPage.cpp
     src/ScriptStore.cpp
     src/T7Patch.cpp
 )
@@ -92,8 +93,9 @@ set(HEADERS
     src/UpdateService.h
     src/QolService.h
     src/QolBackups.h
+    src/WorkshopItems.h
     src/DownloadCenter.h
-    src/pages/QolPage.h
+    src/pages/BackupsPage.h
 )
 
 qt_add_resources(QRC_SOURCES resources/resources.qrc)

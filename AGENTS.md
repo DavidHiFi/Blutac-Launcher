@@ -19,7 +19,10 @@ release line (2.16.x); this app is 2.0.x. Do not compare the two.
 src/                 app code (upstream layout kept so upstream merges stay possible)
 src/Version.h        version and every brand string, URL and feed address
 src/QolService.*     the series: mod state, packs, controller icons, ReShade install
-src/pages/QolPage.*  the "Game Configuration" sidebar page
+src/WorkshopItems.*  packs, Plutonium add-ons and QoL mods: install, list, remove
+src/pages/HomePage.* the Workshop: browse by game, search, install
+src/pages/ModsPage.* the Mods tab: mods, scripts, texture and sound packs, Plutonium
+src/pages/BackupsPage.* the Backups page, one section per game with a game filter
 src/GameLauncher.*   LAN and online launch (both the bootstrapper), ReShade watchdog
 src/PlutoniumAuth.*  Plutonium account: saved token, validate, mint a session token
 src/VersionCompare.h the one rule for "is there an update", shared by both callers
@@ -146,11 +149,15 @@ running rather than failing on a locked DLL, and re-checks the result before
 reporting success.
 
 **Backups are the player's files, kept where the script kept them.**
-`src/QolBackups.*` writes `storage\t6\backups\<kind>\<part>\`, the layout
-qol-installer.ps1 and the 1.x app used, so a backup taken by either restores
-here. Kinds: images, zone, controller, reshade, mod, scripts (both `scripts\`
-and `raw\`), settings, mods (other mods and `usermaps`, never automatic).
-Rules that matter:
+`src/QolBackups.*` writes Black Ops II's and ReShade's backups to
+`storage\t6\backups\<kind>\<part>\`, the layout qol-installer.ps1 and the 1.x
+app used, so a backup taken by either restores here. Black Ops II kinds: images,
+zone, controller, scripts (both `scripts\` and `raw\`), settings, mod, mods
+(other mods and `usermaps`, never automatic); ReShade is the `reshade` kind
+under the "plutonium" game. Black Ops, World at War and Modern Warfare 3 kinds
+are `<game>/<kind>` and live in `storage\<game>\backups\<kind>\`.
+`QolBackups::games()` and `kinds(game)` drive the Backups page; a new kind shows
+up there by itself. Rules that matter:
 
 * Every install calls `backupFirst` before it writes. Each kind keeps its
   **oldest** copy unless replaced by hand; the oldest is the one from before
@@ -174,6 +181,47 @@ and `$VaultDir` in `resources/tools/reshade-watchdog.ps1` must agree
 The watchdog never overwrites a file that exists in `bin`; it only puts back what
 Plutonium deleted, and copies edited top-level `*.ini` back into the vault.
 
+**DLSS 5 is a downloaded payload with its own release tag, and it never goes online.**
+The app reads `dlss5-manifest.json` from the `dlss5-stable` release (`QOL_DLSS_RELEASE_URL`),
+downloads the archive it names, checks the archive's size and sha256, then checks every
+file against the archive's own `payload.json`. It unpacks with Windows' `tar.exe`, so
+7-Zip is not needed, and swaps the result into `reshade-lan\` whole. Rules that were paid for:
+
+* **Never re-host LumeniteFX.** Its AGNYA licence forbids it. The payload lists it
+  under `remote` with the author's raw URL and a hash, and the app fetches it from
+  there. `nvngx_dlss.dll` comes from `NVIDIA/DLSS` the same way. The app accepts no
+  other `remote` origin (`kRemoteOrigins`). Payload 1.0.0 carried the kernel and was
+  deleted from the release for that reason.
+* **The payload must run on a PC with no shader pack.** 1.0.0 had no `ReShade.fxh`,
+  no Lumenite includes and no 64-bit VC++ runtime. It worked only on this PC, which had
+  all three from other installs. `kDlssRequired` and `-selftest -testdlss` now fail on that.
+* **The helper's ReShade is `host64\d3d12.dll`, never `dxgi.dll`.** The helper calls
+  `LoadLibrary("dxgi.dll")` first. On the user's PC a Windhawk mod scoped to every
+  process (Win32 UI Modernizer) has already loaded Windows' own `dxgi.dll` by then, so
+  that call returned the system copy: no ReShade, no RenoDX consumer, no neural pass, with
+  every file present and the feed running. The helper log still says "dxgi.dll here is
+  Windows' own", and its banner says ReShade did not attach. Both are wrong under this
+  name. The truth is in `host64\ReShade.log`: "loaded from ...\d3d12.dll",
+  "feature 18 created", "evaluation succeeded". Check with
+  `host64\dlss5-feed-host64.exe --test` in a copy of the folder.
+* **Online is enforced in `GameLauncher::launchOnline`, not in the GUI.** Both the
+  button and `-nogui -online` go through it. It switches bin to the stock build, parks
+  any stray `*.addon*` (DLSS 5 Swapper puts its own feeder in bin), and refuses to
+  start unless `onlineReShadeSafe` passes.
+* **A LAN session puts bin back when it ends** (`MainWindow::afterSessionEnded`,
+  and again at app start). Otherwise the add-on build sits in bin between sessions, and
+  Plutonium's own launcher would start an online game on top of it.
+* **Publishing a new payload:** `python scripts\build-dlss5-payload.py --donor <game
+  folder with a working feeder> --vcredist <...\x64\Microsoft.VC143.CRT> --output <dir>
+  --version X.Y.Z`. Upload the zip, then `--clobber` the manifest last. Every file is
+  pinned; a donor file that has drifted stops the build.
+
+**The Workshop and the Mods tab share one idea of "installed".** Packs, the
+Plutonium add-ons and the QoL mods go through `WorkshopItems` from both pages.
+A page that reads the `installed-*.txt` manifests or `bin\dxgi.dll` itself will
+drift from the other page; add the case to `WorkshopItems` instead. Packs exist
+for t4, t5 and t6 only; the Mods tab hides the pack lists for IW5.
+
 **Page indices.** `MainWindow::ToolIndex` must match the `m_stack->addWidget` order,
 and sidebar tool buttons map with `kFirstTool`. Insert new pages in both places.
 
@@ -189,7 +237,12 @@ throwaway folder that has an empty `bin\plutonium-bootstrapper-win32.exe`.
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Clean
 dist\BlutacLauncher.exe -installcheck
 dist\BlutacLauncher.exe -selftest -plutoniumdir <throwaway root>
+dist\BlutacLauncher.exe -selftest -testdlss -plutoniumdir <throwaway root>
 ```
+
+`-testdlss` downloads the published DLSS 5 payload (about 180 MB plus LumeniteFX and
+NVIDIA's runtime) into a scratch root, then checks LAN, online, end of session,
+update in place and removal.
 
 `-selftest` exercises ReShade install and remove, backup and restore, watchdog unpack and start,
 every theme, and the Home card / QoL row update rules, one PASS/FAIL line each.
@@ -205,7 +258,10 @@ the desktop. Set `QT_QPA_FONTDIR=C:\Windows\Fonts` too, or every letter renders
 as a box. Run it from a copy of `dist` whose INI has `setup completed=true`, or
 the setup wizard blocks the shot. `QOL_HOME_FEED=<file>` loads a local
 `qol_home.json` in place of the GitHub copy, to check catalog changes before
-they are pushed.
+they are pushed. The app uses whichever catalog has the later `updated` date,
+the downloaded one or the copy built into the exe (a tie goes to the download).
+Bump `updated` with every catalog edit, or an older download or cache hides
+items a newer exe ships with.
 
 To prove a real online launch without touching the GUI:
 

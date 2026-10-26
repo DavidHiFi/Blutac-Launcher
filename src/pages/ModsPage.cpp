@@ -9,9 +9,11 @@
 #include "Downloader.h"
 #include "GithubModInstaller.h"
 #include "HomeCatalog.h"
+#include "QolService.h"
 #include "ScriptStore.h"
 #include "SmartModInstaller.h"
 #include "Storage.h"
+#include "../WorkshopItems.h"
 
 #include <QComboBox>
 #include <QSet>
@@ -32,6 +34,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <QStyle>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrent>
 #include <QMetaObject>
@@ -89,13 +92,13 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
     headCol->addWidget(m_listTitle);
     head->addLayout(headCol, 1);
 
-    // Mods | Scripts: which kind of install the list below manages.
+    // Mods | Scripts | Texture packs | Sound packs | Plutonium: which kind of
+    // install the list below manages.
     auto *views = new QHBoxLayout();
     views->setSpacing(0);
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < ViewCount; ++i) {
         auto *b = new QPushButton(listCard);
         b->setObjectName("TypeSegment");
-        b->setProperty("segment", i == 0 ? "left" : "right");
         b->setCheckable(true);
         b->setChecked(i == 0);
         b->setCursor(Qt::PointingHandCursor);
@@ -104,12 +107,13 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
         views->addWidget(b);
         m_viewButtons << b;
     }
-    head->addLayout(views);
-    head->addSpacing(8);
+    views->addStretch(1);
 
     m_gameCombo = new Ui::ComboBox(listCard);
-    m_gameCombo->addItems({"World at War", "Black ops", "Black ops II", "Modern Warfare 3"});
-    m_gameCombo->setCurrentText("Black ops II");
+    // The item data is the settings id ("Black ops II"); the text is the title.
+    for (const QString &id : {"World at War", "Black ops", "Black ops II", "Modern Warfare 3"})
+        m_gameCombo->addItem(GameCatalog::byId(id).title, id);
+    m_gameCombo->setCurrentIndex(m_gameCombo->findData(QStringLiteral("Black ops II")));
     m_gameCombo->setMinimumWidth(200);
     auto *refreshBtn = new QPushButton(tr("Atualizar"), listCard);
     refreshBtn->setObjectName("modsRefresh");
@@ -121,18 +125,22 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
     head->addWidget(refreshBtn);
     head->addWidget(deselectBtn);
     listLayout->addLayout(head);
+    listLayout->addLayout(views);
 
     m_titleLabel = new QLabel(tr("Selecione um jogo para ver os mods"), listCard);
     m_titleLabel->setObjectName("MutedHint");
     listLayout->addWidget(m_titleLabel);
 
-    // Scripts get their own list so selectedMod() (the mod a launch loads)
-    // can never pick up a script.
+    // Scripts and packs get their own lists so selectedMod() (the mod a
+    // launch loads) can never pick one of them up.
     m_listStack = new QStackedWidget(listCard);
     m_modList = new QListWidget(m_listStack);
     m_scriptList = new QListWidget(m_listStack);
+    m_packList = new QListWidget(m_listStack);
+    m_packList->setWordWrap(true);
     m_listStack->addWidget(m_modList);
     m_listStack->addWidget(m_scriptList);
+    m_listStack->addWidget(m_packList);
     listLayout->addWidget(m_listStack, 1);
 
     auto *listFoot = new QHBoxLayout();
@@ -202,7 +210,8 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
     });
     root->addWidget(installCard);
 
-    connect(m_gameCombo, &QComboBox::currentTextChanged, this, &ModsPage::onGameSelected);
+    connect(m_gameCombo, &QComboBox::currentIndexChanged, this,
+            [this]() { onGameSelected(m_gameCombo->currentData().toString()); });
     connect(refreshBtn, &QPushButton::clicked, this, [this]() { onRefreshOrDeselect(false); });
     m_modList->setCursor(Qt::PointingHandCursor);
     connect(m_modList, &QListWidget::currentItemChanged, this, [this]() { emit selectionChanged(); });
@@ -210,10 +219,12 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
     connect(browseBtn, &QPushButton::clicked, this, &ModsPage::onBrowseModFile);
     connect(m_installBtn, &QPushButton::clicked, this, &ModsPage::onInstallMod);
     connect(deleteBtn, &QPushButton::clicked, this, [this]() {
-        if (m_listStack->currentIndex() == 1)
+        if (m_view == ViewMods)
+            onDeleteMod();
+        else if (m_view == ViewScripts)
             onDeleteScript();
         else
-            onDeleteMod();
+            onDeletePack();
     });
 
     connect(&m_installWatcher, &QFutureWatcher<QString>::finished, this, [this]() {
@@ -385,33 +396,151 @@ ModsPage::ModsPage(AppSettings &settings, QWidget *parent)
         }
     });
 
-    onGameSelected(m_gameCombo->currentText());
+    onGameSelected(m_gameCombo->currentData().toString());
     showView(0);
 }
 
 void ModsPage::showView(int index)
 {
-    m_listStack->setCurrentIndex(index);
-    for (int i = 0; i < m_viewButtons.size(); ++i)
-        m_viewButtons[i]->setChecked(i == index);
+    m_view = index;
+    syncViews();
+    m_listStack->setCurrentIndex(qMin(m_view, int(ViewTextures)));
+    refreshPacks();
     applyViewText();
+}
+
+// Texture and sound packs exist for World at War, Black Ops and Black Ops II
+// only. Plutonium add-ons work in every game, so that view hides the game box.
+void ModsPage::syncViews()
+{
+    const bool packs = Storage::gameStorageId(m_settings.modId) != QLatin1String("iw5");
+    if (!packs && (m_view == ViewTextures || m_view == ViewSounds))
+        m_view = ViewMods;
+    QList<QPushButton *> shown;
+    for (int i = 0; i < m_viewButtons.size(); ++i) {
+        QPushButton *b = m_viewButtons[i];
+        const bool show = packs || (i != ViewTextures && i != ViewSounds);
+        b->setVisible(show);
+        if (show)
+            shown << b;
+        b->setChecked(i == m_view);
+    }
+    for (QPushButton *b : m_viewButtons) {
+        const char *segment = b == shown.value(0) ? "left" : (b == shown.value(shown.size() - 1) ? "right" : "");
+        if (b->property("segment").toString() != QLatin1String(segment)) {
+            b->setProperty("segment", segment);
+            b->style()->unpolish(b);
+            b->style()->polish(b);
+        }
+    }
+    m_gameCombo->setVisible(m_view != ViewPlutonium);
 }
 
 void ModsPage::applyViewText()
 {
-    const bool scripts = m_listStack->currentIndex() == 1;
     const QString game = m_gameCombo->currentText();
-    m_viewButtons[0]->setText(tr("Mods"));
-    m_viewButtons[1]->setText(tr("Scripts"));
-    m_listTitle->setText(scripts ? tr("Installed scripts") : tr("Mods instalados"));
-    m_listHint->setText(scripts ? tr("Plutonium loads these every time you start the game, with or without a mod.")
-                                : tr("O mod selecionado e usado ao iniciar o jogo."));
-    if (game.isEmpty())
-        m_titleLabel->setText(tr("Selecione um jogo para ver os mods"));
-    else
-        m_titleLabel->setText(scripts ? tr("Scripts for %1").arg(game) : tr("Mods disponiveis para %1").arg(game));
+    const QStringList names = {tr("Mods"), tr("Scripts"), tr("Texture packs"), tr("Sound packs"),
+                               QStringLiteral("Plutonium")};
+    for (int i = 0; i < m_viewButtons.size() && i < names.size(); ++i)
+        m_viewButtons[i]->setText(names[i]);
+
+    const QString folder = QStringLiteral("storage\\%1\\%2")
+                               .arg(Storage::gameStorageId(m_settings.modId),
+                                    m_view == ViewTextures ? QStringLiteral("images") : QStringLiteral("zone"));
+    QString title, hint, line, remove;
+    switch (m_view) {
+    case ViewScripts:
+        title = tr("Installed scripts");
+        hint = tr("Plutonium loads these every time you start the game, with or without a mod.");
+        line = tr("Scripts for %1").arg(game);
+        remove = tr("Remove script");
+        break;
+    case ViewTextures:
+        title = tr("Installed texture packs");
+        hint = tr("Texture packs sit in %1 and load with every mod.").arg(folder);
+        line = tr("Texture packs for %1").arg(game);
+        remove = tr("Remove pack");
+        break;
+    case ViewSounds:
+        title = tr("Installed sound packs");
+        hint = tr("Sound packs sit in %1 and load with every mod.").arg(folder);
+        line = tr("Sound packs for %1").arg(game);
+        remove = tr("Remove pack");
+        break;
+    case ViewPlutonium:
+        title = tr("Plutonium add-ons");
+        hint = tr("Turn them on or off for each launch on the Play page.");
+        line = tr("These work in every Plutonium game.");
+        remove = tr("Remove add-on");
+        break;
+    default:
+        title = tr("Mods instalados");
+        hint = tr("O mod selecionado e usado ao iniciar o jogo.");
+        line = tr("Mods disponiveis para %1").arg(game);
+        remove = tr("Excluir mod");
+        break;
+    }
+    m_listTitle->setText(title);
+    m_listHint->setText(hint);
+    m_titleLabel->setText(game.isEmpty() && m_view != ViewPlutonium ? tr("Selecione um jogo para ver os mods") : line);
     if (m_job != Job::Remove)
-        m_deleteBtn->setText(scripts ? tr("Remove script") : tr("Excluir mod"));
+        m_deleteBtn->setText(remove);
+}
+
+QString ModsPage::packType() const
+{
+    switch (m_view) {
+    case ViewTextures: return QStringLiteral("texture");
+    case ViewSounds: return QStringLiteral("sound");
+    case ViewPlutonium: return QStringLiteral("plutonium");
+    default: return QString();
+    }
+}
+
+// The Workshop installs packs and add-ons; this list shows what is in place
+// and takes them out again.
+void ModsPage::refreshPacks()
+{
+    m_packList->clear();
+    const QString type = packType();
+    if (type.isEmpty())
+        return;
+    const QList<WorkshopItems::Installed> items =
+        WorkshopItems::installed(m_settings, type, Storage::gameStorageId(m_settings.modId));
+    for (const WorkshopItems::Installed &it : items) {
+        auto *item = new QListWidgetItem(it.detail.isEmpty() ? it.name : it.name + QLatin1Char('\n') + it.detail);
+        item->setData(Qt::UserRole, it.id);
+        item->setData(Qt::UserRole + 1, it.name);
+        item->setData(Qt::UserRole + 2, it.game);
+        m_packList->addItem(item);
+    }
+    if (items.isEmpty()) {
+        const QString text = type == QLatin1String("plutonium")
+            ? tr("Nothing installed yet. ReShade and DLSS 5 are in the Workshop under Plutonium.")
+            : (type == QLatin1String("texture") ? tr("No texture packs yet. The Workshop has some for %1.")
+                                                : tr("No sound packs yet. The Workshop has some for %1."))
+                  .arg(m_gameCombo->currentText());
+        auto *empty = new QListWidgetItem(text);
+        empty->setFlags(Qt::NoItemFlags);
+        m_packList->addItem(empty);
+    }
+}
+
+void ModsPage::onDeletePack()
+{
+    auto *item = m_packList->currentItem();
+    const QString id = item ? item->data(Qt::UserRole).toString() : QString();
+    if (id.isEmpty()) {
+        QMessageBox::information(this, m_deleteBtn->text(), tr("Pick one in the list first."));
+        return;
+    }
+    WorkshopItems::remove(this, m_settings,
+                          {id, item->data(Qt::UserRole + 1).toString(), item->data(Qt::UserRole + 2).toString(),
+                           QString()},
+                          [this]() {
+                              refreshPacks();
+                              emit catalogChanged();
+                          });
 }
 
 void ModsPage::refreshScripts()
@@ -508,7 +637,10 @@ void ModsPage::refreshList()
         }
         if (hide)
             continue;
-        rows.append({folder, folder});
+        // The Workshop installs Quality of Life as zm_qol; show its name.
+        const QString qol = QolService::seriesFor(sid).folder;
+        const bool isQol = !qol.isEmpty() && folder.compare(qol, Qt::CaseInsensitive) == 0;
+        rows.append({folder, isQol ? QStringLiteral("Quality of Life (%1)").arg(folder) : folder});
         seen.insert(folder.toLower());
     }
     std::sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) {
@@ -526,6 +658,7 @@ void ModsPage::refreshList()
             m_modList->setCurrentItem(item);
     }
     refreshScripts();
+    refreshPacks();
     emit selectionChanged();
 }
 
@@ -534,8 +667,11 @@ void ModsPage::onGameSelected(const QString &gameName)
     if (gameName.isEmpty())
         return;
     m_settings.modId = gameName;
-    if (m_listStack)
+    if (m_listStack) {
+        syncViews();
+        m_listStack->setCurrentIndex(qMin(m_view, int(ViewTextures)));
         applyViewText();
+    }
     refreshList();
 }
 
@@ -543,10 +679,10 @@ void ModsPage::selectGame(const QString &gameId)
 {
     if (gameId.isEmpty())
         return;
-    const int idx = m_gameCombo->findText(gameId);
+    const int idx = m_gameCombo->findData(gameId);
     if (idx >= 0)
         m_gameCombo->setCurrentIndex(idx);
-    onGameSelected(m_gameCombo->currentText());
+    onGameSelected(m_gameCombo->currentData().toString());
 }
 
 void ModsPage::onRefreshOrDeselect(bool clearSelection)
@@ -555,10 +691,12 @@ void ModsPage::onRefreshOrDeselect(bool clearSelection)
     if (clearSelection) {
         // In the Scripts view this clears the script pick, never the mod the
         // next launch loads.
-        if (m_listStack->currentIndex() == 1)
+        if (m_view == ViewScripts)
             m_scriptList->setCurrentRow(-1);
-        else
+        else if (m_view == ViewMods)
             m_modList->setCurrentRow(-1);
+        else
+            m_packList->setCurrentRow(-1);
     }
 }
 
@@ -746,7 +884,7 @@ void ModsPage::onInstallMod()
 {
     // The visible combo is the source of truth — do not rely on a signal
     // that may not have fired on first open.
-    const QString game = m_gameCombo->currentText();
+    const QString game = m_gameCombo->currentData().toString();
     if (game.isEmpty()) {
         Dialogs::error(this, tr("Selecione um jogo na lista acima antes de instalar o mod."));
         return;

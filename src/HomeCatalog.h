@@ -23,13 +23,17 @@ struct Mod
     QString url;
     QStringList tags;
     qint64 downloads = 0;
-    QString type;        // "mod" | "script"
+    QString type;        // "mod" | "script" | "texture" | "sound" | "plutonium"
     QString mode;        // script: "zm" | "mp"
     QString file;        // script: repo path, also bundled at ":/<file>"
     QString forMod;      // script: id of the mod it was made for ("for" in the JSON)
     QString folder;      // mod: its folder under storage/<game>/mods
 
     bool isScript() const { return type == QLatin1String("script"); }
+    // A texture or sound pack: files into storage/<game>/images or zone.
+    bool isPack() const { return type == QLatin1String("texture") || type == QLatin1String("sound"); }
+    // ReShade, DLSS 5 and the like: they belong to Plutonium, not to a game.
+    bool isPlutonium() const { return type == QLatin1String("plutonium"); }
 };
 
 struct Game
@@ -45,9 +49,9 @@ struct Game
 struct Catalog
 {
     QString title;
+    QString updated;      // "updated", yyyy-mm-dd: the newer of two copies wins
     QList<Game> games;
     QStringList featured; // ids de mods, na ordem do slider
-    QStringList hubs;     // mod ids offered as filters next to the games
     QList<Mod> mods;
     bool ok = false;
     bool fromCache = false;

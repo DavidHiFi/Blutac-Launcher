@@ -6,6 +6,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QMap>
 #include <QRegularExpression>
 #include <QSet>
@@ -23,9 +24,10 @@ struct Part {
     QString path;            // where the files live
     bool folder = false;     // true: everything under path, recursively
     QStringList items;       // folder == false: these names
-    QString glob;            // folder == false: and these
+    QString glob;            // folder == false: and these; folder == true: only these
     QStringList skip;        // folder == true: top-level entries left out
     QStringList notOurs;     // install manifests whose files are ours, not the player's
+    QStringList forget;      // more manifests a restore takes its files out of
 };
 
 struct Set {
@@ -60,66 +62,108 @@ const QStringList kGameSettings = {"plutonium_zm.cfg", "plutonium_mp.cfg", "bind
 
 QString t6(const AppSettings &s) { return QolService::t6Storage(s); }
 QString under(const QString &root, const QString &rel) { return QDir::cleanPath(QDir(root).filePath(rel)); }
+// "storage\t5\images", the way the page names a folder.
+QString shown(const QString &game, const QString &sub)
+{
+    return QStringLiteral("storage\\%1\\%2").arg(game, sub);
+}
 
+// Every game's backups, keyed by kind id (see QolBackups::kinds).
 QMap<QString, Set> sets(const AppSettings &s)
 {
-    const QString storage = t6(s);
-    const QString images = under(storage, "images");
-    const QString bin = under(s.plutoniumInstance, "bin");
     QMap<QString, Set> m;
-    // The texture and sound backups leave out the files our own packs put
-    // there. Those can be downloaded again at any time; the backup is for what
-    // was the player's, and a restore should hand back exactly that.
-    m["images"] = {QObject::tr("My textures"), QObject::tr("your textures"),
-                   QObject::tr("Everything in storage\\t6\\images that this app did not put there. "
-                               "The HD texture pack writes here."),
-                   {{"images", images, true, {}, {}, {}, {"images", "controller"}}}};
-    m["zone"] = {QObject::tr("My sounds"), QObject::tr("your sounds"),
-                 QObject::tr("Everything in storage\\t6\\zone that this app did not put there. "
-                             "The custom sound pack writes here."),
-                 {{"zone", under(storage, "zone"), true, {}, {}, {}, {"zone"}}}};
+    for (const QString &g : {QStringLiteral("t6"), QStringLiteral("t5"), QStringLiteral("t4"), QStringLiteral("iw5")}) {
+        const QString storage = QolService::gameStorage(s, g);
+        const auto kind = [&g](const QString &base) { return QolBackups::kindFor(g, base); };
+        const bool t6 = g == QLatin1String("t6");
+        // Texture and sound packs are World at War, Black Ops and Black Ops II
+        // only. Both backups leave out the files a pack put there: those can
+        // be downloaded again any time, and a restore should hand back exactly
+        // what was the player's.
+        if (g != QLatin1String("iw5")) {
+            m[kind("images")] = {QObject::tr("My textures"), QObject::tr("your textures"),
+                                 QObject::tr("Everything in %1 that this app did not put there. "
+                                             "Texture packs install here.").arg(shown(g, "images")),
+                                 {{"images", under(storage, "images"), true, {}, {}, {},
+                                   t6 ? QStringList{"images", "controller"} : QStringList{"images"}}}};
+            m[kind("zone")] = {QObject::tr("My sounds"), QObject::tr("your sounds"),
+                               QObject::tr("Everything in %1 that this app did not put there. "
+                                           "Sound packs install here.").arg(shown(g, "zone")),
+                               {{"zone", under(storage, "zone"), true, {}, {}, {}, {"zone"}}}};
+        }
+        // Both places Plutonium loads loose scripts from: scripts\ (GSC mods
+        // dropped in by hand) and raw\ (scripts, menus and maps, where Zombies
+        // Declassified and other script packs install). The game runs them on
+        // every map whatever mod is picked, which is exactly why they need to
+        // be easy to park and put back.
+        m[kind("scripts")] = {QObject::tr("My scripts"), QObject::tr("your scripts"),
+                              QObject::tr("Everything in %1 and %2: loose GSC scripts, menus and maps.")
+                                  .arg(shown(g, "scripts"), shown(g, "raw")),
+                              {{"scripts", under(storage, "scripts"), true},
+                               {"raw", under(storage, "raw"), true}}};
+        // Every other mod. Can run to gigabytes, so it is only ever backed up
+        // when asked, never before an install.
+        if (t6)
+            m[kind("mods")] = {QObject::tr("My other mods and maps"), QObject::tr("your other mods and maps"),
+                               QObject::tr("Every mod in storage\\t6\\mods except Quality of Life, and every custom "
+                                           "map in storage\\t6\\usermaps. Can be large, so it is never automatic."),
+                               {{"mods", under(storage, "mods"), true, {}, {}, {"zm_qol"}},
+                                {"usermaps", under(storage, "usermaps"), true}}};
+        else
+            m[kind("mods")] = {QObject::tr("My mods"), QObject::tr("your mods"),
+                               QObject::tr("Every mod in %1. Can be large, so it is never automatic.")
+                                   .arg(shown(g, "mods")),
+                               {{"mods", under(storage, "mods"), true}}};
+    }
+
+    const QString storage = t6(s);
     m["controller"] = {QObject::tr("My controller icons"), QObject::tr("your controller icons"),
                        QObject::tr("The button-prompt images a controller icon pack replaces."),
-                       {{"controller", images, false, kIconNames, {}, {}, {"controller"}}}};
-    // Glob *.ini catches a preset saved under the player's own name, which the
-    // fixed list cannot know in advance.
-    m["reshade"] = {QObject::tr("My ReShade setup"), QObject::tr("your ReShade setup"),
-                    QObject::tr("ReShade's dxgi.dll, every preset .ini and the reshade-shaders folder "
-                                "in Plutonium's bin."),
-                    {{"bin", bin, false, kReShadeNames, "*.ini"},
-                     {"reshade-shaders", under(bin, "reshade-shaders"), true}}};
-    m["mod"] = {QObject::tr("The mod + my settings"), QObject::tr("the mod and its settings"),
+                       {{"controller", under(storage, "images"), false, kIconNames, {}, {}, {"controller"},
+                         {"images"}}}};
+    m["mod"] = {QObject::tr("Quality of Life + my settings"), QObject::tr("Quality of Life and its settings"),
                 QObject::tr("The Quality of Life mod folder and your saved menu settings for it."),
                 {{"files", under(storage, "mods/zm_qol"), true},
                  {"settings", under(storage, "players/mods/zm_qol"), false, kModSettings}}};
-    // Both places Plutonium loads loose scripts from: scripts\ (GSC mods
-    // dropped in by hand) and raw\ (scripts, menus and maps, where Zombies
-    // Declassified and other script packs install). The game runs them on
-    // every map whatever mod is picked, which is exactly why they need to be
-    // easy to park and put back.
-    m["scripts"] = {QObject::tr("My scripts"), QObject::tr("your scripts"),
-                    QObject::tr("Everything in storage\\t6\\scripts and storage\\t6\\raw: loose GSC "
-                                "scripts, menus and maps."),
-                    {{"scripts", under(storage, "scripts"), true},
-                     {"raw", under(storage, "raw"), true}}};
     m["settings"] = {QObject::tr("My game settings"), QObject::tr("your game settings"),
                      QObject::tr("Plutonium's configs, key bindings and graphics settings for Zombies "
                                  "and Multiplayer, and your Quality of Life menu settings. Never your stats."),
                      {{"players", under(storage, "players"), false, kGameSettings},
                       {"mod-settings", under(storage, "players/mods/zm_qol"), false, kModSettings}}};
-    // Every other mod and custom map. Can run to gigabytes, so it is only
-    // ever backed up when asked, never before an install.
-    m["mods"] = {QObject::tr("My other mods and maps"), QObject::tr("your other mods and maps"),
-                 QObject::tr("Every mod in storage\\t6\\mods except Quality of Life, and every custom "
-                             "map in storage\\t6\\usermaps. Can be large, so it is never automatic."),
-                 {{"mods", under(storage, "mods"), true, {}, {}, {"zm_qol"}},
-                  {"usermaps", under(storage, "usermaps"), true}}};
+    // Black Ops keeps its configs loose in players\; World at War keeps one
+    // set per profile under players\profiles\<name>\. Both write stats next
+    // to them in files that are not .cfg.
+    m["t5/settings"] = {QObject::tr("My game settings"), QObject::tr("your game settings"),
+                        QObject::tr("The config files in storage\\t5\\players. Never your stats."),
+                        {{"players", under(QolService::gameStorage(s, "t5"), "players"), false, {}, "*.cfg"}}};
+    m["t4/settings"] = {QObject::tr("My game settings"), QObject::tr("your game settings"),
+                        QObject::tr("Every profile's config files under storage\\t4\\players. Never your stats."),
+                        {{"players", under(QolService::gameStorage(s, "t4"), "players"), true, {}, "*.cfg"}}};
+    // Glob *.ini catches a preset saved under the player's own name, which the
+    // fixed list cannot know in advance. ReShade is backed up before it is
+    // installed, so nothing here is left out as ours, but a restore still
+    // takes the files it puts back out of the install manifest.
+    const QString bin = under(s.plutoniumInstance, "bin");
+    m["reshade"] = {QObject::tr("My ReShade setup"), QObject::tr("your ReShade setup"),
+                    QObject::tr("ReShade's dxgi.dll, every preset .ini and the reshade-shaders folder "
+                                "in Plutonium's bin."),
+                    {{"bin", bin, false, kReShadeNames, "*.ini", {}, {}, {"reshade"}},
+                     {"reshade-shaders", under(bin, "reshade-shaders"), true}}};
     return m;
 }
 
-QString manifestFile(const AppSettings &s, const QString &kind)
+// The install manifests named `base` for one game: the app's own pack
+// (installed-images.txt) and each Workshop pack (installed-images-<id>.txt).
+QStringList manifestFiles(const AppSettings &s, const QString &game, const QString &base)
 {
-    return QDir(QolService::stateDir(s)).filePath(QStringLiteral("installed-%1.txt").arg(kind));
+    const QDir state(QolService::stateDir(s, game));
+    QStringList out;
+    const QString own = state.filePath(QStringLiteral("installed-%1.txt").arg(base));
+    if (QFileInfo::exists(own))
+        out << own;
+    for (const QString &n : state.entryList({QStringLiteral("installed-%1-*.txt").arg(base)}, QDir::Files))
+        out << state.filePath(n);
+    return out;
 }
 
 QStringList readLines(const QString &path)
@@ -137,21 +181,22 @@ QStringList readLines(const QString &path)
     return out;
 }
 
-QSet<QString> oursIn(const AppSettings &s, const Part &part)
+QSet<QString> oursIn(const AppSettings &s, const QString &game, const Part &part)
 {
     QSet<QString> out;
     for (const QString &k : part.notOurs)
-        for (const QString &rel : readLines(manifestFile(s, k)))
-            out.insert(rel.toLower());
+        for (const QString &mf : manifestFiles(s, game, k))
+            for (const QString &rel : readLines(mf))
+                out.insert(rel.toLower());
     return out;
 }
 
 struct FileRef { QString path; QString rel; qint64 size = 0; };
 
-QList<FileRef> partFiles(const AppSettings &s, const Part &part)
+QList<FileRef> partFiles(const AppSettings &s, const QString &game, const Part &part)
 {
     QList<FileRef> out;
-    const QSet<QString> ours = oursIn(s, part);
+    const QSet<QString> ours = oursIn(s, game, part);
     if (part.folder) {
         const QDir dir(part.path);
         if (!dir.exists())
@@ -162,6 +207,8 @@ QList<FileRef> partFiles(const AppSettings &s, const Part &part)
             const QString rel = dir.relativeFilePath(it.filePath());
             if (!part.skip.isEmpty()
                 && part.skip.contains(rel.section(QLatin1Char('/'), 0, 0), Qt::CaseInsensitive))
+                continue;
+            if (!part.glob.isEmpty() && !QDir::match(part.glob, it.fileName()))
                 continue;
             if (ours.contains(rel.toLower()))
                 continue;
@@ -232,32 +279,34 @@ bool copyFile(const QString &from, const QString &to, QString &error)
 // backup is the player's again, and the manifest is the list a Remove deletes,
 // so leaving it there would delete their file on the next Remove. A manifest
 // left with nothing in it means nothing of that pack remains.
-void forgetFromManifest(const AppSettings &s, const QString &kind, const QStringList &rels)
+void forgetFromManifest(const AppSettings &s, const QString &game, const QString &base,
+                        const QStringList &rels)
 {
-    const QString path = manifestFile(s, kind);
-    if (rels.isEmpty() || !QFileInfo::exists(path))
+    if (rels.isEmpty())
         return;
     QSet<QString> back;
     for (const QString &r : rels)
         back.insert(r.toLower());
-    const QStringList before = readLines(path);
-    QStringList keep;
-    for (const QString &line : before)
-        if (!back.contains(line.toLower()))
-            keep << line;
-    if (keep.size() == before.size())
-        return;
-    if (keep.isEmpty()) {
-        QFile::remove(path);
-        if (kind == QLatin1String("controller"))
-            QFile::remove(QDir(QolService::stateDir(s)).filePath(QStringLiteral("controller-pack.txt")));
-        return;
-    }
-    QFile f(path);
-    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
-        QTextStream out(&f);
-        for (const QString &k : keep)
-            out << k << '\n';
+    for (const QString &path : manifestFiles(s, game, base)) {
+        const QStringList before = readLines(path);
+        QStringList keep;
+        for (const QString &line : before)
+            if (!back.contains(line.toLower()))
+                keep << line;
+        if (keep.size() == before.size())
+            continue;
+        if (keep.isEmpty()) {
+            QFile::remove(path);
+            if (base == QLatin1String("controller"))
+                QFile::remove(QDir(QolService::stateDir(s)).filePath(QStringLiteral("controller-pack.txt")));
+            continue;
+        }
+        QFile f(path);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            QTextStream out(&f);
+            for (const QString &k : keep)
+                out << k << '\n';
+        }
     }
 }
 
@@ -265,25 +314,78 @@ void forgetFromManifest(const AppSettings &s, const QString &kind, const QString
 
 namespace QolBackups {
 
-QStringList kinds()
+QStringList games()
 {
-    // Page order: the ones an install writes over first.
-    return {"images", "zone", "controller", "reshade", "mod", "scripts", "settings", "mods"};
+    return {"t6", "t5", "t4", "iw5", "plutonium"};
 }
 
-QStringList automaticKinds()
+QStringList kinds(const QString &game)
+{
+    if (game.isEmpty()) {
+        QStringList all;
+        for (const QString &g : games())
+            all << kinds(g);
+        return all;
+    }
+    // Page order: the ones an install writes over first.
+    if (game == QLatin1String("t6"))
+        return {"images", "zone", "controller", "scripts", "settings", "mod", "mods"};
+    if (game == QLatin1String("plutonium"))
+        return {"reshade"};
+    QStringList bases;
+    if (game == QLatin1String("t5") || game == QLatin1String("t4"))
+        bases = {"images", "zone", "scripts", "settings", "mods"};
+    else if (game == QLatin1String("iw5"))
+        bases = {"scripts", "mods"};
+    QStringList out;
+    for (const QString &b : bases)
+        out << kindFor(game, b);
+    return out;
+}
+
+QStringList automaticKinds(const QString &game)
 {
     // Not "mod": that is our own mod, which can be downloaded again, and a
     // first-install copy of it kept forever would be 400 MB of nothing. The
     // player's menu settings for it are in "settings".
-    return {"images", "zone", "controller", "reshade", "scripts", "settings"};
+    QStringList out;
+    for (const QString &k : kinds(game)) {
+        const QString base = k.section(QLatin1Char('/'), -1);
+        if (base != QLatin1String("mod") && base != QLatin1String("mods"))
+            out << k;
+    }
+    return out;
+}
+
+QString kindFor(const QString &game, const QString &base)
+{
+    if (game == QLatin1String("t6") || game == QLatin1String("plutonium"))
+        return base;
+    return game + QLatin1Char('/') + base;
+}
+
+QString gameOf(const QString &kind)
+{
+    if (kind.contains(QLatin1Char('/')))
+        return kind.section(QLatin1Char('/'), 0, 0);
+    return kind == QLatin1String("reshade") ? QStringLiteral("plutonium") : QStringLiteral("t6");
 }
 
 QString root(const AppSettings &s) { return QDir(t6(s)).filePath(QStringLiteral("backups")); }
 
+// Black Ops II's backups, and ReShade's, sit where every earlier version put
+// them; the other games keep theirs in their own storage folder.
+QString folder(const AppSettings &s, const QString &kind)
+{
+    const QString g = gameOf(kind);
+    if (g == QLatin1String("t6") || g == QLatin1String("plutonium"))
+        return QDir(root(s)).filePath(kind);
+    return QDir(QolService::gameStorage(s, g)).filePath(QStringLiteral("backups/") + kind.section(QLatin1Char('/'), 1));
+}
+
 bool exists(const AppSettings &s, const QString &kind)
 {
-    return QDir(QDir(root(s)).filePath(kind)).exists();
+    return QDir(folder(s, kind)).exists();
 }
 
 Info info(const AppSettings &s, const QString &kind, bool measure)
@@ -291,20 +393,21 @@ Info info(const AppSettings &s, const QString &kind, bool measure)
     const auto all = sets(s);
     Info out;
     out.kind = kind;
+    out.game = gameOf(kind);
     if (!all.contains(kind))
         return out;
     const Set &set = all[kind];
     out.label = set.label;
     out.title = set.title;
     out.desc = set.desc;
-    out.folder = QDir(root(s)).filePath(kind);
+    out.folder = folder(s, kind);
     out.exists = QDir(out.folder).exists();
     if (out.exists)
         out.when = takenAt(out.folder);
     if (!measure)
         return out;
     for (const Part &part : set.parts)
-        for (const FileRef &f : partFiles(s, part)) {
+        for (const FileRef &f : partFiles(s, out.game, part)) {
             ++out.liveFiles;
             out.liveBytes += f.size;
         }
@@ -327,13 +430,13 @@ Result backup(const AppSettings &s, const QString &kind, bool replace, const Pro
         return Result::Failed;
     }
     const Set &set = all[kind];
-    const QString dest = QDir(root(s)).filePath(kind);
+    const QString dest = folder(s, kind);
     // Checked before anything is measured: this runs before every install,
     // and walking a gigabyte of textures only to keep the old copy is waste.
     if (QDir(dest).exists() && !replace) {
         message = QObject::tr("A backup of %1 already exists from %2 - kept it. That is the older copy, "
                               "so it is the one worth having.")
-                      .arg(set.title, takenAt(dest).toString(QStringLiteral("d MMM yyyy HH:mm")));
+                      .arg(set.title, takenAt(dest).toString(QStringLiteral("d MMM yyyy h:mm AP")));
         return Result::KeptOlder;
     }
 
@@ -341,7 +444,7 @@ Result backup(const AppSettings &s, const QString &kind, bool replace, const Pro
     int total = 0;
     qint64 bytes = 0;
     for (const Part &part : set.parts) {
-        const QList<FileRef> files = partFiles(s, part);
+        const QList<FileRef> files = partFiles(s, gameOf(kind), part);
         total += files.size();
         for (const FileRef &f : files) bytes += f.size;
         plan << qMakePair(part, files);
@@ -352,8 +455,9 @@ Result backup(const AppSettings &s, const QString &kind, bool replace, const Pro
     }
     // Room check up front. A backup that runs the disk dry half-way through
     // helps nobody and can take the install down with it.
-    QDir().mkpath(root(s));
-    const QStorageInfo disk(root(s));
+    const QString parent = QFileInfo(dest).absolutePath();
+    QDir().mkpath(parent);
+    const QStorageInfo disk(parent);
     if (disk.isValid() && disk.bytesAvailable() > 0 && disk.bytesAvailable() < bytes + 64LL * 1024 * 1024) {
         message = QObject::tr("Not enough free space to back up %1: it needs %2 and %3 is free.")
                       .arg(set.title, fmtSize(bytes), fmtSize(disk.bytesAvailable()));
@@ -427,7 +531,8 @@ bool backupBeforeInstall(const AppSettings &s, const QStringList &required, cons
     return true;
 }
 
-bool restore(const AppSettings &s, const QString &kind, const Progress &p, QString &error)
+bool restore(const AppSettings &s, const QString &kind, const Progress &p, QString &error,
+             const QStringList &only)
 {
     if (const QString g = QolService::runningGame(); !g.isEmpty()) {
         error = QObject::tr("Close Plutonium first (%1 is running). The game keeps these files open.").arg(g);
@@ -439,7 +544,7 @@ bool restore(const AppSettings &s, const QString &kind, const Progress &p, QStri
         return false;
     }
     const Set &set = all[kind];
-    const QString dir = QDir(root(s)).filePath(kind);
+    const QString dir = folder(s, kind);
     if (!QDir(dir).exists()) {
         error = QObject::tr("There is no backup of %1 to put back.").arg(set.title);
         return false;
@@ -467,38 +572,42 @@ bool restore(const AppSettings &s, const QString &kind, const Progress &p, QStri
         for (const QFileInfo &fi : QDir(dir).entryInfoList(QDir::Files))
             moves << Move{fi.filePath(), QDir(set.parts.first().path).filePath(fi.fileName()),
                           fi.fileName(), &set.parts.first()};
+    if (!only.isEmpty()) {
+        QSet<QString> wanted;
+        for (const QString &r : only)
+            wanted.insert(QDir::fromNativeSeparators(r).toLower());
+        moves.removeIf([&wanted](const Move &m) { return !wanted.contains(m.rel.toLower()); });
+        if (moves.isEmpty())
+            return true; // none of the removed files had an original of yours
+    }
     if (moves.isEmpty()) {
         error = QObject::tr("That backup is empty - there is nothing to put back.");
         return false;
     }
 
     int done = 0;
-    QStringList imagesBack, zoneBack, binBack;
+    QHash<const Part *, QStringList> back;
     for (const Move &m : moves) {
         if (!copyFile(m.from, m.to, error)) {
             error = QObject::tr("Putting back %1 stopped part-way: %2").arg(set.title, error);
             return false;
         }
-        const QString path = m.part->path;
-        if (path.endsWith(QLatin1String("/images"))) imagesBack << m.rel;
-        else if (path.endsWith(QLatin1String("/zone"))) zoneBack << m.rel;
-        else if (path.endsWith(QLatin1String("/bin"))) binBack << m.rel;
+        back[m.part] << m.rel;
         ++done;
         if (p && (done % 25 == 0 || done == moves.size()))
             p(QObject::tr("Putting back %1 (%2 of %3)").arg(set.title).arg(done).arg(moves.size()),
               int(done * 100LL / moves.size()));
     }
-    forgetFromManifest(s, QStringLiteral("images"), imagesBack);
-    forgetFromManifest(s, QStringLiteral("controller"), imagesBack);
-    forgetFromManifest(s, QStringLiteral("zone"), zoneBack);
-    forgetFromManifest(s, QStringLiteral("reshade"), binBack);
+    for (auto it = back.cbegin(); it != back.cend(); ++it)
+        for (const QString &base : it.key()->notOurs + it.key()->forget)
+            forgetFromManifest(s, gameOf(kind), base, it.value());
     appendLog(s, QStringLiteral("restore: %1 (%2 files)").arg(kind).arg(done));
     return true;
 }
 
 bool remove(const AppSettings &s, const QString &kind, QString &error)
 {
-    const QString dir = QDir(root(s)).filePath(kind);
+    const QString dir = folder(s, kind);
     if (!QDir(dir).exists())
         return true;
     if (!QDir(dir).removeRecursively()) {
