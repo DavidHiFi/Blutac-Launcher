@@ -6,11 +6,14 @@
 #include "VersionCompare.h"
 
 #include <QAbstractButton>
+#include <QApplication>
+#include <QHash>
 #include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QWidget>
+#include <QtConcurrent/QtConcurrent>
 
 #include <optional>
 
@@ -135,7 +138,48 @@ void removeWithRestore(QWidget *parent, AppSettings &s, const QString &title, co
            {}, done);
 }
 
+// Game code to the newest release tag GitHub reported, without the "v".
+QHash<QString, QString> &latestQol()
+{
+    static QHash<QString, QString> tags;
+    return tags;
+}
+
 } // namespace
+
+void fetchLatestQol(QObject *context, const Done &done)
+{
+    static bool asked = false;
+    if (asked)
+        return;
+    asked = true;
+    const QPointer<QObject> guard(context);
+    auto future = QtConcurrent::run([guard, done]() {
+        QHash<QString, QString> tags;
+        for (const QolService::SeriesMod &m : QolService::series()) {
+            QString err;
+            const QString tag = m.released ? QolService::latestModVersion(m, err) : QString();
+            if (!tag.isEmpty())
+                tags.insert(m.gameCode, VersionCompare::normalise(tag));
+        }
+        QMetaObject::invokeMethod(qApp, [guard, done, tags]() {
+            latestQol().insert(tags);
+            if (guard)
+                done();
+        }, Qt::QueuedConnection);
+    });
+    Q_UNUSED(future);
+}
+
+void applyLatestQol(HomeCatalog::Catalog &cat)
+{
+    for (HomeCatalog::Mod &m : cat.mods) {
+        const QString tag = latestQol().value(m.game);
+        if (builtinOf(m.id) == Builtin::Qol && !tag.isEmpty()
+            && (m.version.isEmpty() || VersionCompare::isUpdate(m.version, tag)))
+            m.version = tag;
+    }
+}
 
 bool handles(const HomeCatalog::Mod &m)
 {

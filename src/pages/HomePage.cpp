@@ -947,6 +947,11 @@ void HomePage::buildUi()
 void HomePage::reload()
 {
     m_catalog = HomeCatalog::load();
+    WorkshopItems::applyLatestQol(m_catalog);
+    WorkshopItems::fetchLatestQol(this, [this]() {
+        WorkshopItems::applyLatestQol(m_catalog);
+        refreshInstallState();
+    });
     m_installs = HomeCatalog::scanInstalled(m_settings.plutoniumInstance);
     if (!m_catalog.ok) {
         m_status->setText(tr("Catalogo indisponivel — %1").arg(m_catalog.error));

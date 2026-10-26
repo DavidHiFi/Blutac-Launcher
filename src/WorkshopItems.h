@@ -30,4 +30,11 @@ namespace WorkshopItems
     using Done = std::function<void()>;
     void install(QWidget *parent, AppSettings &s, const HomeCatalog::Mod &m, const Done &done);
     void remove(QWidget *parent, AppSettings &s, const Installed &item, const Done &done);
+
+    // The catalog's Quality of Life versions trail the releases. The first call
+    // asks GitHub for each released mod's newest tag off the UI thread and runs
+    // `done` on the UI thread once the answers are in, unless `context` is gone.
+    void fetchLatestQol(QObject *context, const Done &done);
+    // Raises each Quality of Life entry to the newest release seen so far.
+    void applyLatestQol(HomeCatalog::Catalog &cat);
 }

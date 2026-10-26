@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-26",
+  "updated": "2026-10-27",
   "title": "Blutac Launcher",
   "note": "Workshop feed. A copy ships inside the exe; the app refreshes from this file on GitHub, so mods, scripts and packs can be added here without a release.",
   "featured": [
@@ -57,7 +57,7 @@
       "name": "Quality of Life",
       "game": "t6",
       "author": "DavidHiFi",
-      "version": "2.18.0",
+      "version": "2.20.0",
       "size": "375 MB",
       "summary": "Quality of life changes for Black Ops II Zombies: menus, HUD, weapons and fixes, all toggleable in game.",
       "description": "An in-game settings menu, more weapons in the Mystery Box, bonus Survival maps, chat commands and dozens of fixes.",
