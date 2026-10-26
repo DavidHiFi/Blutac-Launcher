@@ -236,29 +236,20 @@ QolPage::QolPage(AppSettings &settings, QWidget *parent)
     connect(m_dlss.primary, &QPushButton::clicked, this, [this]() {
         QString err;
         if (QolService::dlssPayloadReady(m_settings)) {
-            if (!confirm(tr("DLSS 5"), tr("Remove the imported DLSS 5 payload? LAN keeps the add-on build of "
-                                          "ReShade; only DLSS stops being offered.")))
+            if (!confirm(tr("DLSS 5"), tr("Remove DLSS 5 from this PC? ReShade stays installed.")))
                 return;
-            QDir(QolService::reShadeLanVault(m_settings)).removeRecursively();
-            if (!QolService::applyReShadeMode(m_settings, QolService::ReShadeMode::Online, false, err)
-                && !err.isEmpty())
+            if (!QolService::removeDlssPayload(m_settings, err))
                 QMessageBox::warning(this, tr("DLSS 5"), err);
             refresh();
             return;
         }
-        // The payload is 237 MB of NVIDIA runtimes under their own licence, so
-        // it is never shipped with this app: it is imported from a folder on
-        // this PC that already has DLSS 5 working.
-        const QString donor = QFileDialog::getExistingDirectory(
-            this, tr("Pick a game folder that already has DLSS 5 installed"),
-            m_settings.bo2.isEmpty() ? QDir::homePath() : m_settings.bo2);
-        if (donor.isEmpty())
-            return;
-        runJob(tr("Importing the DLSS 5 payload"),
-               [this, donor](QString &e, const std::function<void(const QString &, int)> &p,
-                             const CancelHandle &) {
-                   p(tr("Copying the DLSS 5 runtimes"), 10);
-                   return QolService::importDlssPayload(m_settings, donor, e);
+        runJob(tr("Installing DLSS 5"),
+               [this](QString &e, const std::function<void(const QString &, int)> &p,
+                      const CancelHandle &) {
+                   p(tr("Checking the published DLSS 5 release"), 2);
+                   QolService::DlssRelease release;
+                   if (!QolService::latestDlssRelease(release, e)) return false;
+                   return QolService::installDlssPayload(m_settings, release, p, e);
                });
         refresh();
     });

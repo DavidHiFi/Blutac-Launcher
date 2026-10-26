@@ -20,6 +20,12 @@
 #define QOL_HOME_FEED_URL   QOL_RAW_BASE "qol_home.json"
 #define QOL_UPDATE_FEED_URL QOL_RAW_BASE "qol_update.json"
 #define QOL_LAUNCHER_ASSET  "BlutacLauncher.update.bin"
+// The DLSS 5 LAN payload has its own release tag, kept apart from app releases
+// so a payload update never looks like (or replaces) an app update. The app
+// reads the manifest, then downloads only an asset under the same tag. The
+// published manifest names the old repo; GitHub redirects it.
+#define QOL_DLSS_ASSET_PREFIX "https://github.com/DavidHiFi/QualityOfLifeModManager/releases/download/dlss5-stable/"
+#define QOL_DLSS_RELEASE_URL QOL_DLSS_ASSET_PREFIX "dlss5-manifest.json"
 // Cod LAN Launcher, the upstream this app is forked from (LGPL-3.0).
 #define CLL_UPSTREAM_URL    "https://github.com/MestreTM/CLL-Cod-Lan-Launcher"
 #define CLL_PU_DAT_URL      "https://github.com/MestreTM/CLL-CodLanLauncher/releases/download/v0.1/pu.dat"
