@@ -2061,16 +2061,26 @@ bool applyReShadeMode(const AppSettings &s, ReShadeMode mode, bool dlss, QString
     // DLSS runs is the feeder's own `enabled` key. Files may come back; the
     // pass does not.
     //
-    // host_window is the expensive one. With the DLSS 5 panel cast into the
-    // game the helper renders its whole ReShade overlay into a 900x1352
-    // texture every frame and the game composites it: measured here that is
-    // about 28 ms of CPU stall per frame on top of the neural pass. The panel
-    // is for changing settings, not for playing behind, so it starts hidden
-    // and F10 brings it up.
+    // DLSS 5 settings live where every other add-on's do: the game's own
+    // ReShade overlay, under Add-ons - DLSS 5 Feed. So there is no second
+    // window and no key of its own, and cast_key stays 0. Casting the panel
+    // into the game (the old F10 route) costs frames while it is up, about
+    // 28 ms of CPU per frame measured on the first build. On feeder 0.15.1
+    // with the ShortFuse consumer one cast is worse: it wakes a second neural
+    // route that alternates between the game's and the helper's swapchain
+    // sizes, and every 1500x1350/2560x1440 flip makes NGX rebuild the
+    // feature. That churn ran at 11 to 15 ms per frame for the rest of the
+    // session even after the panel was hidden again (measured 2026-10-27, T6
+    // 11:50 AM to 11:58 AM).
+    //
+    // host_window=0 keeps the helper's window behind the game and off the
+    // taskbar. 2 (the --hide build, no window at all) first appeared in
+    // feeders newer than the 0.15.1 installed here; this binary has no
+    // --hide at all.
     if (withDlss)
         setFeederKeys(bin, {{QStringLiteral("enabled"), QStringLiteral("1")},
                             {QStringLiteral("host_window"), QStringLiteral("0")},
-                            {QStringLiteral("cast_key"), QStringLiteral("121")}});
+                            {QStringLiteral("cast_key"), QStringLiteral("0")}});
 
     // Three states, not two. The watchdog restores whatever Plutonium clears
     // out of bin, and the LAN vault holds both the add-on runtime (wanted by

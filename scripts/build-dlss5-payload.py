@@ -129,8 +129,13 @@ REMOTE_PINS = {
 }
 
 # The feeder starts off: the app turns it on for a LAN session that asked for
-# DLSS. host_window=0 keeps the helper's panel out of the game until F10; its
-# redraw costs ~28 ms of CPU per frame while it is shown.
+# DLSS. No cast_key here; the app's setFeederKeys adds it, as 0. The DLSS 5
+# settings live in the game's ReShade overlay, under Add-ons - DLSS 5 Feed.
+# Casting the panel into the game costs frames while it is shown (about 28 ms
+# of CPU per frame measured on the first build) and wakes NGX feature churn
+# on feeder 0.15.1 with the ShortFuse consumer. host_window=0 keeps the
+# helper's window behind the game; 2 (--hide) needs a feeder newer than
+# 0.15.1.
 FEEDER_CONFIG = (b"enabled=0\r\nmode=2\r\nhdr=-1\r\ndepth_inverted=-1\r\nflags=-1\r\n"
                  b"reset_every=0\r\nwarmup_rebuild=180\r\nrebuild=0\r\nlog_frames=3\r\n"
                  b"create_delay=60\r\npreset=0\r\nwork_resolution=100\r\nmv_scale_x=1.000\r\n"

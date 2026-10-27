@@ -118,8 +118,9 @@ PlayPage::PlayPage(AppSettings &settings, QWidget *parent)
     m_dlss5->setToolTip(tr("NVIDIA DLSS 5 neural rendering, LAN only, through the DLSS5-Feeder add-on. It is a "
                            "separate choice from ReShade because it is not free: the neural pass runs in a "
                            "64-bit helper process and this 32-bit engine waits on the round trip each frame. "
-                           "Press F10 in game for its panel - leave that panel closed while playing, it costs "
-                           "far more than the pass does."));
+                           "Its settings live in the ReShade overlay, under Add-ons - DLSS 5 Feed. Do not "
+                           "cast the DLSS 5 panel into the game while playing, the cast costs far more "
+                           "than the pass does."));
     opts->addWidget(m_dlss5);
     opts->addSpacing(12);
     m_modeHint = new QLabel(this);
@@ -338,8 +339,9 @@ void PlayPage::updateLaunchOptions()
             m_dlss5->setToolTip(tr("NVIDIA DLSS 5 neural rendering, LAN only, through the DLSS5-Feeder add-on. "
                                    "It is a separate choice from ReShade because it is not free: the neural "
                                    "pass runs in a 64-bit helper process and this 32-bit engine waits on the "
-                                   "round trip each frame. Press F10 in game for its panel - leave that panel "
-                                   "closed while playing, it costs far more than the pass does."));
+                                   "round trip each frame. Its settings live in the ReShade overlay, under "
+                                   "Add-ons - DLSS 5 Feed. Do not cast the DLSS 5 panel into the game while "
+                                   "playing, the cast costs far more than the pass does."));
         }
     }
     if (!plutoGame) {
@@ -359,7 +361,7 @@ void PlayPage::updateLaunchOptions()
         hint += QStringLiteral("  ") + tr("ReShade is not installed yet. Get it from the Workshop under Plutonium.");
     else if (m_settings.launchReShade && !online && code == QLatin1String("t6")
              && m_settings.launchDlss5 && QolService::dlssPayloadReady(m_settings))
-        hint += QStringLiteral("  ") + tr("ReShade runs with full add-on support and DLSS 5 (F10 for its panel).");
+        hint += QStringLiteral("  ") + tr("ReShade runs with full add-on support and DLSS 5 (settings in the ReShade overlay's Add-ons page).");
     else if (m_settings.launchReShade && !online)
         hint += QStringLiteral("  ") + tr("ReShade runs with full add-on support.");
     else if (m_settings.launchReShade && online)

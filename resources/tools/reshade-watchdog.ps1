@@ -513,7 +513,7 @@ else {
 $mode = Get-ActiveMode
 if ($mode -eq 'lan-dlss') {
     Write-Host "  Mode: LAN - ReShade with full add-on support, DLSS 5 running." -ForegroundColor Green
-    Write-Host "        F10 shows the DLSS 5 panel. It costs frames while it is up." -ForegroundColor DarkGray
+    Write-Host "        DLSS 5 settings: ReShade overlay, Add-ons, DLSS 5 Feed (no key needed)." -ForegroundColor DarkGray
 } elseif ($mode -eq 'lan') {
     Write-Host "  Mode: LAN - ReShade with full add-on support. DLSS 5 off." -ForegroundColor Green
 } else {
