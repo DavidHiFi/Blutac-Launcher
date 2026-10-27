@@ -32,6 +32,7 @@ namespace GameLauncher
     // ReShade watchdog: ships in the exe, unpacked next to it under tools\.
     // Returns the pid of the PowerShell window, or 0 with an error.
     qint64 startReShadeWatchdog(const QString &plutoniumRoot, QString &error);
+    QString toolsDir();
     qint64 runningReShadeWatchdog();   // pid of the one this app started, or 0
     void stopReShadeWatchdog();        // called when the app closes
     bool reShadeInstalled(const QString &plutoniumRoot);
