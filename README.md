@@ -176,6 +176,17 @@ Thanks to everyone using the launcher, reporting catalog bugs and sending fixes.
 
 - **Author:** Myself, [DavidHiFi](https://github.com/DavidHiFi)
 
+<!-- contributors:start -->
+- **Contributors:** [MestreTM](https://github.com/MestreTM)
+- **AI coding agents:** [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex) and Halo Sparks
+
+<p>
+  <a href="https://github.com/DavidHiFi"><img src="https://github.com/DavidHiFi.png?size=96" width="48" height="48" alt="DavidHiFi" title="DavidHiFi"></a>
+  <a href="https://github.com/MestreTM"><img src="https://github.com/MestreTM.png?size=96" width="48" height="48" alt="MestreTM" title="MestreTM"></a>
+  <a href="https://github.com/anthropics/claude-code"><img src="https://github.com/claude.png?size=96" width="48" height="48" alt="Claude Code" title="Claude Code"></a>
+</p>
+<!-- contributors:end -->
+
 | Who | What |
 |---|---|
 | **MestreTM** ([Cod Lan Launcher](https://github.com/MestreTM/CLL-Cod-Lan-Launcher)) | The app this one is forked from, at v1.2.0. The games list, mod installer, LAN server, base themes and updater are its work. |
